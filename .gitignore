@@ -1,0 +1,7 @@
+# binaries
+test/bin
+*.test
+
+# ide settings
+.idea
+.vscode

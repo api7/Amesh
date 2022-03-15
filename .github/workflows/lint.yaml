@@ -1,0 +1,42 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+jobs:
+  gofmt:
+    timeout-minutes: 1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Go Environment
+        uses: actions/setup-go@v1
+        with:
+          go-version: '1.16.5'
+      - name: Run gofmt
+        run: |
+          diffs=`gofmt -l .`
+          if [[ -n $diffs ]]; then
+              echo "Files are not formatted by gofmt:"
+              echo $diffs
+              exit 1
+          fi
+  golint:
+    timeout-minutes: 3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Go Environment
+        uses: actions/setup-go@v1
+        with:
+          go-version: '1.16.5'
+      - name: Run staticcheck
+        run: |
+          TEMP_PATH="$(mktemp -d)"
+          PATH="${TEMP_PATH}:$PATH"
+          curl -sfL  "https://github.com/dominikh/go-tools/releases/latest/download/staticcheck_linux_amd64.tar.gz" | tar -xvz -C "${TEMP_PATH}" --strip-components=1
+          staticcheck -checks 'inherit,-SA1019' ./...
