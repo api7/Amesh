@@ -18,52 +18,54 @@ package apisix
 #cgo LDFLAGS: -shared
 #include <stdlib.h>
 
-extern void ngx_http_lua_ffi_shdict_store(void *zone, int op,
-    const unsigned char *key, size_t key_len,
-	int value_type,
-    const unsigned char *str_value_buf, size_t str_value_len,
-    double num_value, long exptime, int user_flags, char **errmsg,
-    int *forcible);
+//extern void ngx_http_lua_ffi_shdict_store(void *zone, int op,
+//    const unsigned char *key, size_t key_len,
+//	int value_type,
+//    const unsigned char *str_value_buf, size_t str_value_len,
+//    double num_value, long exptime, int user_flags, char **errmsg,
+//    int *forcible);
 */
 import "C"
 import (
 	"unsafe"
-
-	"github.com/api7/amesh/pkg/amesh"
 )
 
+type Storage interface {
+	Store(string, string)
+}
+
 var (
-	_ amesh.Storage = (*SharedDictStorage)(nil)
+	_ Storage = (*SharedDictStorage)(nil)
 )
 
 type SharedDictStorage struct {
 	zone unsafe.Pointer
 }
 
-func NewSharedDictStorage(zone unsafe.Pointer) amesh.Storage {
+func NewSharedDictStorage(zone unsafe.Pointer) Storage {
 	return &SharedDictStorage{
 		zone: zone,
 	}
 }
 
 func (s *SharedDictStorage) Store(key, value string) {
-	var keyCStr = C.CString(key)
-	defer C.free(unsafe.Pointer(keyCStr))
-	var keyLen = C.size_t(len(key))
-
-	var valueCStr = C.CString(value)
-	defer C.free(unsafe.Pointer(valueCStr))
-	var valueLen = C.size_t(len(value))
-
-	errMsgBuf := make([]*C.char, 1)
-	var forcible = 0
-
-	C.ngx_http_lua_ffi_shdict_store(s.zone, 0x0004,
-		(*C.uchar)(unsafe.Pointer(keyCStr)), keyLen,
-		4,
-		(*C.uchar)(unsafe.Pointer(valueCStr)), valueLen,
-		0, 0, 0,
-		(**C.char)(unsafe.Pointer(&errMsgBuf[0])),
-		(*C.int)(unsafe.Pointer(&forcible)),
-	)
+	//var keyCStr = C.CString(key)
+	//defer C.free(unsafe.Pointer(keyCStr))
+	//var keyLen = C.size_t(len(key))
+	//
+	//var valueCStr = C.CString(value)
+	//defer C.free(unsafe.Pointer(valueCStr))
+	//var valueLen = C.size_t(len(value))
+	//
+	//errMsgBuf := make([]*C.char, 1)
+	//var forcible = 0
+	//
+	//C.ngx_http_lua_ffi_shdict_store(s.zone, 0x0004,
+	//	(*C.uchar)(unsafe.Pointer(keyCStr)), keyLen,
+	//	4,
+	//	(*C.uchar)(unsafe.Pointer(valueCStr)), valueLen,
+	//	0, 0, 0,
+	//	(**C.char)(unsafe.Pointer(&errMsgBuf[0])),
+	//	(*C.int)(unsafe.Pointer(&forcible)),
+	//)
 }

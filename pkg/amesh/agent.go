@@ -16,22 +16,19 @@ package amesh
 
 import (
 	"context"
-	"github.com/api7/amesh/pkg/amesh/provisioner"
-	"github.com/api7/gopkg/pkg/log"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 	"net"
 	"os"
 	"strings"
 	"time"
 	"unsafe"
 
+	"github.com/api7/gopkg/pkg/log"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+
+	"github.com/api7/amesh/pkg/amesh/provisioner"
 	"github.com/api7/amesh/pkg/apisix"
 )
-
-type Storage interface {
-	Store(string, string)
-}
 
 type Agent struct {
 	ctx       context.Context
@@ -41,7 +38,7 @@ type Agent struct {
 
 	provisioner provisioner.Provisioner
 
-	TargetStorage Storage
+	TargetStorage apisix.Storage
 }
 
 func getNamespace() string {
@@ -131,11 +128,16 @@ func (g *Agent) Run(stop <-chan struct{}) error {
 
 loop:
 	for {
-		events, ok := <-g.provisioner.Channel()
-		if !ok {
+		select {
+		case <-stop:
+			g.logger.Info("stop signal received, grpc event dispatching stopped")
 			break loop
+		case events, ok := <-g.provisioner.Channel():
+			if !ok {
+				break loop
+			}
+			g.storeEvents(events)
 		}
-		g.storeEvents(events)
 	}
 
 	return nil

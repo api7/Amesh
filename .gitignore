@@ -1,6 +1,7 @@
 # binaries
 test/bin
 *.test
+bin
 
 # ide settings
 .idea

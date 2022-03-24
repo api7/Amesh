@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"C"
 	"github.com/api7/gopkg/pkg/log"
@@ -26,12 +27,16 @@ import (
 )
 
 func main() {
+	cmd := NewAmeshCommand()
+	if err := cmd.Execute(); err != nil {
+		os.Exit(-1)
+	}
 }
 
 // NewAmeshCommand creates the root command for apisix-mesh-agent.
 func NewAmeshCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "amesh-mock [command] [flags]",
+		Use:   "amesh [command] [flags]",
 		Short: "An Apache APISIX service mesh mock.",
 	}
 	cmd.AddCommand(

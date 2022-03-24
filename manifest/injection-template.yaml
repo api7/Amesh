@@ -1,0 +1,33 @@
+metadata:
+  labels:
+    service.istio.io/canonical-name: {{ index .ObjectMeta.Labels `service.istio.io/canonical-name` | default (index .ObjectMeta.Labels `app.kubernetes.io/name`) | default (index .ObjectMeta.Labels `app`) | default .DeploymentMeta.Name  | quote }}
+    service.istio.io/canonical-revision: {{ index .ObjectMeta.Labels `service.istio.io/canonical-revision` | default (index .ObjectMeta.Labels `app.kubernetes.io/version`) | default (index .ObjectMeta.Labels `version`) | default "latest"  | quote }}
+    istio.io/rev: {{ .Revision | default "default" | quote }}
+spec:
+  containers:
+  - name: istio-proxy
+    image: "{{ .Values.global.proxy.hub }}/{{ .Values.global.proxy.image }}:{{ .Values.global.proxy.tag }}"
+#    ports:
+#    - containerPort: 9080
+#      protocol: TCP
+#      name: http-outbound
+#    - containerPort: 9081
+#      protocol: TCP
+#      name: http-inbound
+#    - containerPort: 17739
+#      protocol: TCP
+#      name: agent
+    args:
+      - run
+      - --xds-config-source
+      - "grpc://istiod.istio-system.svc.cluster.local:15010"
+    env:
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    imagePullPolicy: Always #"{{ valueOrDefault .Values.global.imagePullPolicy `Always` }}"

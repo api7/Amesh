@@ -18,14 +18,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"google.golang.org/grpc/credentials/insecure"
 	"strings"
+	"time"
 
 	"github.com/api7/gopkg/pkg/log"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	discoveryv3 "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/api7/amesh/pkg/version"
 	"github.com/api7/amesh/pkg/xds"
@@ -91,16 +92,22 @@ func (p *xdsProvisioner) Channel() <-chan []Event {
 }
 
 func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
+	p.logger.Infow("provisioner started")
+	defer p.logger.Info("provisioner exited")
 	defer close(p.evChan)
 
 	for {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		conn, err := grpc.DialContext(ctx, p.src,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
 		)
 		if err != nil {
 			cancel()
+			p.logger.Errorw("failed to conn xds source",
+				zap.Error(err),
+				zap.String("xds_source", p.src),
+			)
 			return err
 		}
 		cleanup := func() {
@@ -112,6 +119,8 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 				)
 			}
 		}
+		p.logger.Info("xds connected")
+
 		if err := p.run(ctx, conn); err != nil {
 			cleanup()
 			return err
@@ -123,7 +132,7 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 			return nil
 		case err = <-p.resetCh:
 			cleanup()
-			log.Errorw("grpc client reset",
+			p.logger.Errorw("grpc client reset, try reconnect",
 				zap.Error(err),
 			)
 			continue
