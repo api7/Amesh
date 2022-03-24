@@ -14,6 +14,17 @@
 //
 package provisioner
 
+var (
+	// RouteConfigurationUrl is the RDS type url.
+	RouteConfigurationUrl = "type.googleapis.com/envoy.config.route.v3.RouteConfiguration"
+	// ClusterUrl is the Cluster type url.
+	ClusterUrl = "type.googleapis.com/envoy.config.cluster.v3.Cluster"
+	// ClusterLoadAssignmentUrl is the Cluster type url.
+	ClusterLoadAssignmentUrl = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment"
+	// ListenerUrl is the Listener type url.
+	ListenerUrl = "type.googleapis.com/envoy.config.listener.v3.Listener"
+)
+
 // Provisioner provisions config event.
 // The source type can be xDS or UDPA or whatever anything else.
 type Provisioner interface {
