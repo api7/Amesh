@@ -1,5 +1,12 @@
 package apisix
 
+import (
+	"bytes"
+	"encoding/json"
+	"github.com/api7/gopkg/pkg/log"
+	"go.uber.org/zap"
+)
+
 // CompareRoutes diffs two Route array and finds the new adds, updates
 // and deleted ones. Note it stands on the first Route array's point
 // of view.
@@ -28,11 +35,17 @@ func CompareRoutes(r1, r2 []*Route) (added, deleted, updated []*Route) {
 		if rn, ok := r2Map[ro.Id]; !ok {
 			deleted = append(deleted, ro)
 		} else {
-			_ = rn
-			// TODO
-			//if (ro.Revision !=  rn.Revision) {
-			//	updated = append(updated, rn)
-			//}
+			roJson, errO := json.Marshal(ro)
+			rnJson, errN := json.Marshal(rn)
+			if errO != nil || errN != nil {
+				log.Errorw("compare route: marshal failed",
+					zap.NamedError("error_old", errO),
+					zap.NamedError("error_new", errN),
+				)
+				updated = append(updated, rn)
+			} else if bytes.Equal(roJson, rnJson) {
+				updated = append(updated, rn)
+			}
 		}
 	}
 	return
@@ -65,11 +78,17 @@ func CompareUpstreams(u1, u2 []*Upstream) (added, deleted, updated []*Upstream) 
 		if un, ok := u2Map[uo.Id]; !ok {
 			deleted = append(deleted, uo)
 		} else {
-			_ = un
-			// TODO
-			//if (uo.Revision != un.Revisioner) {
-			//	updated = append(updated, un)
-			//}
+			uoJson, errO := json.Marshal(uo)
+			unJson, errN := json.Marshal(un)
+			if errO != nil || errN != nil {
+				log.Errorw("compare upstream: marshal failed",
+					zap.NamedError("error_old", errO),
+					zap.NamedError("error_new", errN),
+				)
+				updated = append(updated, un)
+			} else if bytes.Equal(uoJson, unJson) {
+				updated = append(updated, un)
+			}
 		}
 	}
 	return

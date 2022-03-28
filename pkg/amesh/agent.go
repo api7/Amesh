@@ -16,6 +16,7 @@ package amesh
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"os"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/api7/amesh/pkg/amesh/provisioner"
+	"github.com/api7/amesh/pkg/amesh/types"
 	"github.com/api7/amesh/pkg/apisix"
 )
 
@@ -36,7 +38,7 @@ type Agent struct {
 	xdsSource string
 	logger    *log.Logger
 
-	provisioner provisioner.Provisioner
+	provisioner types.Provisioner
 
 	TargetStorage apisix.Storage
 }
@@ -132,7 +134,7 @@ loop:
 		case <-stop:
 			g.logger.Info("stop signal received, grpc event dispatching stopped")
 			break loop
-		case events, ok := <-g.provisioner.Channel():
+		case events, ok := <-g.provisioner.EventsChannel():
 			if !ok {
 				break loop
 			}
@@ -143,6 +145,23 @@ loop:
 	return nil
 }
 
-func (g *Agent) storeEvents(events []provisioner.Event) {
+func (g *Agent) storeEvents(events []types.Event) {
+	var allObjs []interface{}
+	for _, event := range events {
+		allObjs = append(allObjs, event.Object)
+	}
 
+	data, err := json.Marshal(allObjs)
+	if err != nil {
+		g.logger.Errorw("failed to marshal events",
+			zap.Error(err),
+		)
+		return
+	}
+
+	dataStr := string(data)
+	g.logger.Debugw("store new events",
+		zap.String("data", dataStr),
+	)
+	//g.TargetStorage.Store("data", dataStr)
 }

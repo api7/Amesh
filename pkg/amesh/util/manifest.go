@@ -1,7 +1,7 @@
 package util
 
 import (
-	"github.com/api7/amesh/pkg/amesh/provisioner"
+	"github.com/api7/amesh/pkg/amesh/types"
 	"github.com/api7/amesh/pkg/apisix"
 )
 
@@ -38,25 +38,25 @@ func (m *Manifest) Size() int {
 }
 
 // Events generates events according to its collection.
-func (m *Manifest) Events(evType provisioner.EventType) []provisioner.Event {
-	var events []provisioner.Event
+func (m *Manifest) Events(evType types.EventType) []types.Event {
+	var events []types.Event
 	for _, r := range m.Routes {
-		if evType == provisioner.EventDelete {
-			events = append(events, provisioner.Event{
-				Type:      provisioner.EventDelete,
+		if evType == types.EventDelete {
+			events = append(events, types.Event{
+				Type:      types.EventDelete,
 				Tombstone: r,
 			})
 		} else {
-			events = append(events, provisioner.Event{
+			events = append(events, types.Event{
 				Type:   evType,
 				Object: r,
 			})
 		}
 	}
 	for _, u := range m.Upstreams {
-		if evType == provisioner.EventDelete {
-			events = append(events, provisioner.Event{
-				Type:      provisioner.EventDelete,
+		if evType == types.EventDelete {
+			events = append(events, types.Event{
+				Type:      types.EventDelete,
 				Tombstone: u,
 			})
 		} else {
@@ -64,7 +64,7 @@ func (m *Manifest) Events(evType provisioner.EventType) []provisioner.Event {
 			if u.Nodes == nil || len(u.Nodes) == 0 {
 				continue
 			}
-			events = append(events, provisioner.Event{
+			events = append(events, types.Event{
 				Type:   evType,
 				Object: u,
 			})

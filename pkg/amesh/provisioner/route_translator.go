@@ -2,24 +2,25 @@ package provisioner
 
 import (
 	"fmt"
-	"github.com/api7/amesh/pkg/amesh/util"
-	"github.com/api7/amesh/pkg/apisix"
+	"strings"
+
 	"github.com/api7/gopkg/pkg/id"
 	"github.com/api7/gopkg/pkg/log"
 	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
-	"strings"
-
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	matcherv3 "github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3"
 	xdswellknown "github.com/envoyproxy/go-control-plane/pkg/wellknown"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+
+	"github.com/api7/amesh/pkg/amesh/util"
+	"github.com/api7/amesh/pkg/apisix"
 )
 
 const (
-	_hcmv3                = "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+	_httpConnectManagerV3 = "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
 	_defaultRoutePriority = 999
 )
 
@@ -41,6 +42,11 @@ func (p *xdsProvisioner) TranslateRouteConfiguration(r *routev3.RouteConfigurati
 			patchRoutesWithOriginalDestination(routes, origDst)
 		}
 	}
+
+	p.logger.Debugw("got routes after parsing route config",
+		zap.Any("routes", routes),
+	)
+
 	// TODO support Vhds.
 	return routes, nil
 }
@@ -68,8 +74,8 @@ func (p *xdsProvisioner) translateVirtualHost(prefix string, vhost *routev3.Virt
 	hosts := hostSet.OrderedStrings()
 
 	var routes []*apisix.Route
-	// FIXME Respect the CaseSensitive field.
 	for _, route := range vhost.GetRoutes() {
+		// TODO CaseSensitive field.
 		sensitive := route.GetMatch().CaseSensitive
 		if sensitive != nil && !sensitive.GetValue() {
 			// Apache APISIX doesn't support case insensitive URI match,
@@ -120,6 +126,7 @@ func (p *xdsProvisioner) translateVirtualHost(prefix string, vhost *routev3.Virt
 			Uris:       []string{uri},
 			UpstreamId: id.GenID(cluster),
 			Vars:       vars,
+			Desc:       "GENERATED_BY_AMESH: VIRTUAL_HOST: " + vhost.Name,
 		}
 		routes = append(routes, r)
 	}
@@ -129,8 +136,9 @@ func (p *xdsProvisioner) translateVirtualHost(prefix string, vhost *routev3.Virt
 func (p *xdsProvisioner) getClusterName(route *routev3.Route) (string, bool) {
 	action, ok := route.GetAction().(*routev3.Route_Route)
 	if !ok {
-		p.logger.Warnw("ignore route with unexpected action",
+		p.logger.Warnw("ignore route with unexpected action type",
 			zap.Any("route", route),
+			zap.Any("action", route.GetAction()),
 		)
 		return "", true
 	}
@@ -154,6 +162,7 @@ func (p *xdsProvisioner) getURL(route *routev3.Route) (string, bool) {
 	default:
 		p.logger.Warnw("ignore route with unexpected path specifier",
 			zap.Any("route", route),
+			zap.Any("type", route.GetMatch().GetPathSpecifier()),
 		)
 		return "", true
 	}
@@ -274,20 +283,46 @@ func (p *xdsProvisioner) GetRoutesFromListener(l *listenerv3.Listener) ([]string
 
 	for _, fc := range l.FilterChains {
 		for _, f := range fc.Filters {
-			if f.Name == xdswellknown.HTTPConnectionManager && f.GetTypedConfig().GetTypeUrl() == _hcmv3 {
-				var hcm hcmv3.HttpConnectionManager
-				if err := anypb.UnmarshalTo(f.GetTypedConfig(), &hcm, proto.UnmarshalOptions{}); err != nil {
-					log.Errorw("failed to unmarshal HttpConnectionManager config",
-						zap.Error(err),
-						zap.Any("listener", l),
+			if f.Name == xdswellknown.HTTPConnectionManager {
+				if f.GetTypedConfig().GetTypeUrl() == _httpConnectManagerV3 {
+					var hcm hcmv3.HttpConnectionManager
+					if err := anypb.UnmarshalTo(f.GetTypedConfig(), &hcm, proto.UnmarshalOptions{}); err != nil {
+						log.Errorw("failed to unmarshal HttpConnectionManager config",
+							zap.Error(err),
+							zap.Any("listener", l),
+						)
+						return nil, nil, err
+					}
+					if hcm.GetRds() != nil {
+						rdsNames = append(rdsNames, hcm.GetRds().GetRouteConfigName())
+					} else if hcm.GetRouteConfig() != nil {
+						// TODO deep copy?
+						staticConfigs = append(staticConfigs, hcm.GetRouteConfig())
+					} else if hcm.GetScopedRoutes() != nil {
+						p.logger.Warnw("unsupported ScopedRoutes config",
+							zap.String("typed", f.GetTypedConfig().GetTypeUrl()),
+							zap.Any("config", f.GetTypedConfig()),
+						)
+					}
+				} else {
+					p.logger.Warnw("unsupported HTTPConnectManager version",
+						zap.String("typed", f.GetTypedConfig().GetTypeUrl()),
+						zap.Any("config", f.GetTypedConfig()),
 					)
-					return nil, nil, err
 				}
-				if hcm.GetRds() != nil {
-					rdsNames = append(rdsNames, hcm.GetRds().GetRouteConfigName())
-				} else if hcm.GetRouteConfig() != nil {
-					// TODO deep copy?
-					staticConfigs = append(staticConfigs, hcm.GetRouteConfig())
+			} else {
+				switch f.Name {
+				case xdswellknown.TCPProxy:
+				case xdswellknown.RateLimit:
+					p.logger.Debugw("unsupported filter",
+						zap.String("name", f.Name),
+						zap.Any("config", f.GetTypedConfig()),
+					)
+				default:
+					p.logger.Warnw("unsupported filter",
+						zap.String("name", f.Name),
+						zap.Any("config", f.GetTypedConfig()),
+					)
 				}
 			}
 		}
@@ -295,7 +330,7 @@ func (p *xdsProvisioner) GetRoutesFromListener(l *listenerv3.Listener) ([]string
 	p.logger.Debugw("got route names and config from listener",
 		zap.Strings("route_names", rdsNames),
 		zap.Any("route_configs", staticConfigs),
-		zap.Any("listener", l),
+		//zap.Any("listener", l),
 	)
 	return rdsNames, staticConfigs, nil
 }

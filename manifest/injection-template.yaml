@@ -19,6 +19,8 @@ spec:
 #      name: agent
     args:
       - run
+      - --log-level
+      - debug
       - --xds-config-source
       - "grpc://istiod.istio-system.svc.cluster.local:15010"
     env:
