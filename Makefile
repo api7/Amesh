@@ -16,6 +16,8 @@ BINDIR ?= ./bin
 ENABLE_PROXY ?= false
 export AMESH_SIDECAR_IMAGE ?= amesh-sidecar
 export AMESH_SIDECAR_IMAGE_TAG ?= dev
+export AMESH_SO_IMAGE ?= amesh-so
+export AMESH_SO_IMAGE_TAG ?= dev
 
 .PHONY: create-bin-dir
 create-bin-dir:
@@ -25,12 +27,24 @@ create-bin-dir:
 build-amesh-sidecar: create-bin-dir
 	go build -o $(BINDIR)/amesh-sidecar ./cmd/sidecar
 
+.PHONY: build-amesh-so
+build-amesh-so: create-bin-dir
+	go build -o $(BINDIR)/amesh.so -buildmode=c-shared ./cmd/dynamic
+
 .PHONY: build-amesh-sidecar-image
 build-amesh-sidecar-image:
 ifeq ($(ENABLE_PROXY), true)
 	@docker build -f Dockerfiles/sidecar.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) .
 else
 	@docker build -f Dockerfiles/sidecar.Dockerfile -t $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) .
+endif
+
+.PHONY: build-amesh-so-image
+build-amesh-so-image:
+ifeq ($(ENABLE_PROXY), true)
+	@docker build -f Dockerfiles/luajit.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_SO_IMAGE):$(AMESH_SO_IMAGE_TAG) .
+else
+	@docker build -f Dockerfiles/luajit.Dockerfile -t $(AMESH_SO_IMAGE):$(AMESH_SO_IMAGE_TAG) .
 endif
 
 .PHONY verify-license:

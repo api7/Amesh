@@ -18,11 +18,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	"strings"
 	"time"
 
 	"github.com/api7/gopkg/pkg/log"
+	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
@@ -162,6 +162,9 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 			cleanup()
 			return nil
 		case err = <-p.resetCh:
+			p.logger.Errorw("grpc client reset, closing",
+				zap.Error(err),
+			)
 			cleanup()
 			p.logger.Errorw("grpc client reset, try reconnect",
 				zap.Error(err),
@@ -242,7 +245,12 @@ func (p *xdsProvisioner) recvLoop(ctx context.Context, client discoveryv3.Aggreg
 				p.logger.Errorw("failed to receive discovery response",
 					zap.Error(err),
 				)
-				if strings.Contains(err.Error(), "transport is closing") {
+				errMsg := err.Error()
+				if strings.Contains(errMsg, "transport is closing") ||
+					strings.Contains(errMsg, "DeadlineExceeded") {
+					p.logger.Errorw("trigger grpc client reset",
+						zap.Error(err),
+					)
 					p.resetCh <- err
 					return
 				}
@@ -443,8 +451,8 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 
 func (p *xdsProvisioner) sendEds(edsRequests util.StringSet) {
 	dr := &discoveryv3.DiscoveryRequest{
-		Node:    p.node,
-		TypeUrl: types.ClusterLoadAssignmentUrl,
+		Node:          p.node,
+		TypeUrl:       types.ClusterLoadAssignmentUrl,
 		ResourceNames: edsRequests.Strings(),
 	}
 	p.logger.Debugw("sending EDS discovery request",

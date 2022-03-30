@@ -25,14 +25,14 @@ COPY Makefile Makefile
 COPY cmd/ cmd/
 COPY pkg/ pkg/
 RUN if [ "$ENABLE_PROXY" = "true" ]; then go env -w GOPROXY=https://goproxy.cn,direct ; fi \
-    && make build-amesh-sidecar
+    && make build-amesh-so
 
-FROM centos:7
+FROM nickblah/luajit:2.0.5
 
-WORKDIR /usr/local/amesh
+WORKDIR /amesh
 
-COPY --from=amesh-sidecar-build-stage /amesh/bin/amesh-sidecar ./
+COPY --from=amesh-sidecar-build-stage /amesh/bin/amesh.so ./
+COPY cmd/lua/test.lua .
 
-#COPY ./bin/amesh-sidecar .
 
-ENTRYPOINT ["/usr/local/amesh/amesh-sidecar"]
+ENTRYPOINT ["luajit", "/amesh/test.lua"]
