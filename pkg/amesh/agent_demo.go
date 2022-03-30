@@ -43,8 +43,8 @@ func (g *Agent) RunDemo() error {
 				return err
 			}
 
-			g.TargetStorage.Store("routes", string(routesJson))
-			g.TargetStorage.Store("upstreams", string(upstreamsJson))
+			g.DataStorage.Store("routes", string(routesJson))
+			g.DataStorage.Store("upstreams", string(upstreamsJson))
 		}
 	}
 	return nil

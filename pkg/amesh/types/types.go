@@ -49,6 +49,7 @@ var (
 // Event describes a specific event generated from the provisioner.
 type Event struct {
 	Type   EventType
+	Key    string
 	Object interface{}
 	// Tombstone is only valid for delete event,
 	// in such a case it stands for the final state

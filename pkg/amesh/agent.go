@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -30,6 +31,7 @@ import (
 	"github.com/api7/amesh/pkg/amesh/provisioner"
 	"github.com/api7/amesh/pkg/amesh/types"
 	"github.com/api7/amesh/pkg/apisix"
+	"github.com/api7/amesh/pkg/apisix/storage"
 )
 
 type Agent struct {
@@ -40,7 +42,8 @@ type Agent struct {
 
 	provisioner types.Provisioner
 
-	TargetStorage apisix.Storage
+	DataStorage    apisix.Storage
+	VersionStorage apisix.Storage
 }
 
 func getNamespace() string {
@@ -76,7 +79,7 @@ func getIpAddr() (string, error) {
 	return ipAddr, nil
 }
 
-func NewAgent(ctx context.Context, src string, zone unsafe.Pointer, logLevel, logOutput string) (*Agent, error) {
+func NewAgent(ctx context.Context, src string, dataZone, versionZone unsafe.Pointer, logLevel, logOutput string) (*Agent, error) {
 	ipAddr, err := getIpAddr()
 	if err != nil {
 		return nil, err
@@ -104,12 +107,13 @@ func NewAgent(ctx context.Context, src string, zone unsafe.Pointer, logLevel, lo
 	}
 
 	return &Agent{
-		ctx:           ctx,
-		version:       time.Now().Unix(),
-		xdsSource:     src,
-		logger:        logger,
-		provisioner:   p,
-		TargetStorage: apisix.NewSharedDictStorage(zone),
+		ctx:            ctx,
+		version:        time.Now().Unix(),
+		xdsSource:      src,
+		logger:         logger,
+		provisioner:    p,
+		DataStorage:    storage.NewSharedDictStorage(dataZone),
+		VersionStorage: storage.NewSharedDictStorage(versionZone),
 	}, nil
 }
 
@@ -146,22 +150,35 @@ loop:
 }
 
 func (g *Agent) storeEvents(events []types.Event) {
-	var allObjs []interface{}
-	for _, event := range events {
-		allObjs = append(allObjs, event.Object)
-	}
-
-	data, err := json.Marshal(allObjs)
-	if err != nil {
-		g.logger.Errorw("failed to marshal events",
-			zap.Error(err),
-		)
+	if len(events) == 0 {
 		return
 	}
 
-	dataStr := string(data)
-	g.logger.Debugw("store new events",
-		zap.String("data", dataStr),
+	for _, event := range events {
+		key := event.Key
+		if event.Type == types.EventDelete {
+			g.DataStorage.Store(key, "")
+		} else {
+			data, err := json.Marshal(event.Object)
+			if err != nil {
+				g.logger.Errorw("failed to marshal events",
+					zap.Error(err),
+				)
+				continue
+			}
+			dataStr := string(data)
+			g.DataStorage.Store(key, dataStr)
+			g.logger.Debugw("store new events",
+				zap.String("key", key),
+				zap.String("value", dataStr),
+			)
+		}
+	}
+
+	timestamp := strconv.FormatInt(time.Now().UnixNano()/int64(time.Second), 10)
+	g.VersionStorage.Store("version", timestamp)
+
+	g.logger.Debugw("mark version",
+		zap.String("version", timestamp),
 	)
-	//g.TargetStorage.Store("data", dataStr)
 }

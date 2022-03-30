@@ -436,12 +436,13 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 		for _, ups := range newManifest.Upstreams {
 			events = append(events, types.Event{
 				Type:   types.EventUpdate,
+				Key:    fmt.Sprintf("/apisix/upstreams/%s", ups.Id),
 				Object: ups,
 			})
 		}
 	} else {
-		events = newManifest.Events(types.EventAdd)
-		//events = p.generateIncrementalEvents(&newManifest, &oldManifest)
+		//events = newManifest.Events(types.EventAdd)
+		events = p.generateIncrementalEvents(&newManifest, &oldManifest)
 	}
 	go func() {
 		p.evChan <- events

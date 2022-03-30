@@ -79,7 +79,7 @@ func NewRunCommand() *cobra.Command {
 			defer log.Info("amesh exited")
 
 			ctx, cancel := context.WithCancel(context.Background())
-			g, err := amesh.NewAgent(ctx, cfg.XDSConfigSource, nil, cfg.LogLevel, cfg.LogOutput)
+			g, err := amesh.NewAgent(ctx, cfg.XDSConfigSource, nil, nil, cfg.LogLevel, cfg.LogOutput)
 			if err != nil {
 				utils.Dief("failed to create generator: %v", err.Error())
 			}

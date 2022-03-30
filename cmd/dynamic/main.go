@@ -18,6 +18,7 @@ import "C"
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/api7/gopkg/pkg/log"
 
@@ -36,7 +37,29 @@ func Log(msg string) {
 //export StartAmesh
 func StartAmesh(src string) {
 	ctx, cancel := context.WithCancel(context.Background())
-	agent, err := amesh.NewAgent(ctx, src, nil, "debug", "stderr")
+	agent, err := amesh.NewAgent(ctx, src, nil, nil, "debug", "stderr")
+	if err != nil {
+		utils.Dief("failed to create generator: %v", err.Error())
+	}
+
+	_ = cancel
+	go func() {
+		utils.WaitForSignal(func() {
+			cancel()
+		})
+	}()
+
+	go func() {
+		if err = agent.Run(ctx.Done()); err != nil {
+			utils.Dief("agent error: %v", err.Error())
+		}
+	}()
+}
+
+//export StartAmesh2
+func StartAmesh2(src string, dataZone, versionZone unsafe.Pointer) {
+	ctx, cancel := context.WithCancel(context.Background())
+	agent, err := amesh.NewAgent(ctx, src, dataZone, versionZone, "debug", "stderr")
 	if err != nil {
 		utils.Dief("failed to create generator: %v", err.Error())
 	}

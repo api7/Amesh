@@ -15,6 +15,7 @@
 package util
 
 import (
+	"fmt"
 	"github.com/api7/amesh/pkg/amesh/types"
 	"github.com/api7/amesh/pkg/apisix"
 )
@@ -55,22 +56,27 @@ func (m *Manifest) Size() int {
 func (m *Manifest) Events(evType types.EventType) []types.Event {
 	var events []types.Event
 	for _, r := range m.Routes {
+		key := fmt.Sprintf("/apisix/routes/%s", r.Id)
 		if evType == types.EventDelete {
 			events = append(events, types.Event{
 				Type:      types.EventDelete,
+				Key:       key,
 				Tombstone: r,
 			})
 		} else {
 			events = append(events, types.Event{
 				Type:   evType,
+				Key:    key,
 				Object: r,
 			})
 		}
 	}
 	for _, u := range m.Upstreams {
+		key := fmt.Sprintf("/apisix/upstreams/%s", u.Id)
 		if evType == types.EventDelete {
 			events = append(events, types.Event{
 				Type:      types.EventDelete,
+				Key:       key,
 				Tombstone: u,
 			})
 		} else {
@@ -80,6 +86,7 @@ func (m *Manifest) Events(evType types.EventType) []types.Event {
 			}
 			events = append(events, types.Event{
 				Type:   evType,
+				Key:    key,
 				Object: u,
 			})
 		}
