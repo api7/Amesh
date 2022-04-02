@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-//+build shared_lib
+//go:build shared_lib
+// +build shared_lib
 
 package storage
 

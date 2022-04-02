@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-//+build sidecar
+//go:build sidecar
+// +build sidecar
 
 package storage
 
