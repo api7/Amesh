@@ -12,27 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-FROM golang:1.16.5 as amesh-sidecar-build-stage
+FROM golang:1.16.5 as amesh-iptables-build-stage
 
 ARG ENABLE_PROXY=false
-WORKDIR /amesh
+WORKDIR /amesh-iptables
 
-COPY go.* ./
+COPY cmd/iptables/go.* ./
 RUN if [ "$ENABLE_PROXY" = "true" ]; then go env -w GOPROXY=https://goproxy.cn,direct ; fi \
     && go mod download
 
-COPY Makefile Makefile
-COPY cmd/sidecar cmd/sidecar
-COPY pkg/ pkg/
-RUN if [ "$ENABLE_PROXY" = "true" ]; then go env -w GOPROXY=https://goproxy.cn,direct ; fi \
-    && make build-amesh-sidecar
+COPY cmd/iptables/Makefile Makefile
+COPY cmd/iptables .
 
-FROM centos:7
+RUN if [ "$ENABLE_PROXY" = "true" ]; then go env -w GOPROXY=https://goproxy.cn,direct ; fi \
+    && make build-amesh-iptables
+
+FROM alpine:3.15.0
+
+RUN apk add --no-cache --virtual .builddeps \
+    iptables \
+    bash \
+    libstdc++ \
+    curl \
+    lsof
 
 WORKDIR /usr/local/amesh
 
-COPY --from=amesh-sidecar-build-stage /amesh/bin/amesh-sidecar ./
+COPY --from=amesh-iptables-build-stage /amesh-iptables/amesh-iptables ./
 
-#COPY ./bin/amesh-sidecar .
+#COPY ./bin/amesh-iptables .
 
-ENTRYPOINT ["/usr/local/amesh/amesh-sidecar"]
+ENTRYPOINT ["/usr/local/amesh/amesh-iptables"]

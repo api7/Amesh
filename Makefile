@@ -16,6 +16,8 @@ BINDIR ?= ./bin
 ENABLE_PROXY ?= false
 export AMESH_SIDECAR_IMAGE ?= amesh-sidecar
 export AMESH_SIDECAR_IMAGE_TAG ?= dev
+export AMESH_IPTABLES_IMAGE ?= amesh-iptables
+export AMESH_IPTABLES_IMAGE_TAG ?= dev
 export AMESH_SO_IMAGE ?= amesh-so
 export AMESH_SO_IMAGE_TAG ?= dev
 
@@ -30,6 +32,14 @@ build-amesh-sidecar: create-bin-dir
 .PHONY: build-amesh-so
 build-amesh-so: create-bin-dir
 	go build -o $(BINDIR)/amesh.so -buildmode=c-shared ./cmd/dynamic
+
+.PHONY: build-amesh-iptables-image
+build-amesh-iptables-image:
+ifeq ($(ENABLE_PROXY), true)
+	@docker build -f Dockerfiles/iptables.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
+else
+	@docker build -f Dockerfiles/iptables.Dockerfile -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
+endif
 
 .PHONY: build-amesh-sidecar-image
 build-amesh-sidecar-image:

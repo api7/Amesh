@@ -22,7 +22,7 @@ RUN if [ "$ENABLE_PROXY" = "true" ]; then go env -w GOPROXY=https://goproxy.cn,d
     && go mod download
 
 COPY Makefile Makefile
-COPY cmd/ cmd/
+COPY cmd/dynamic cmd/dynamic
 COPY pkg/ pkg/
 RUN if [ "$ENABLE_PROXY" = "true" ]; then go env -w GOPROXY=https://goproxy.cn,direct ; fi \
     && make build-amesh-so

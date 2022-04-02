@@ -277,16 +277,17 @@ func getStringMatchValue(matcher *matcherv3.StringMatcher) string {
 }
 
 func patchRoutesWithOriginalDestination(routes []*apisix.Route, origDst string) {
-	if strings.HasPrefix(origDst, "0.0.0.0:") {
-		port := origDst[len("0.0.0.0:"):]
-		for _, r := range routes {
-			r.Vars = append(r.Vars, &apisix.Var{"connection_original_dst", "~~", port + "$"})
-		}
-	} else {
-		for _, r := range routes {
-			r.Vars = append(r.Vars, &apisix.Var{"connection_original_dst", "==", origDst})
-		}
-	}
+	// TODO: apply this
+	//if strings.HasPrefix(origDst, "0.0.0.0:") {
+	//	port := origDst[len("0.0.0.0:"):]
+	//	for _, r := range routes {
+	//		r.Vars = append(r.Vars, &apisix.Var{"connection_original_dst", "~~", port + "$"})
+	//	}
+	//} else {
+	//	for _, r := range routes {
+	//		r.Vars = append(r.Vars, &apisix.Var{"connection_original_dst", "==", origDst})
+	//	}
+	//}
 }
 
 func (p *xdsProvisioner) GetRoutesFromListener(l *listenerv3.Listener) ([]string, []*routev3.RouteConfiguration, error) {
