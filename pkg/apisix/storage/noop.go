@@ -12,26 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-//+build shared_lib
+//+build sidecar
 
 package storage
 
-/*
-#cgo LDFLAGS: -shared
-#include <stdlib.h>
-
-extern void ngx_http_lua_ffi_shdict_store(void *zone, int op,
-    const unsigned char *key, size_t key_len,
-	int value_type,
-    const unsigned char *str_value_buf, size_t str_value_len,
-    double num_value, long exptime, int user_flags, char **errmsg,
-    int *forcible);
-*/
 import "C"
 import (
 	"unsafe"
-
-	"github.com/api7/gopkg/pkg/log"
 
 	"github.com/api7/amesh/pkg/apisix"
 )
@@ -51,28 +38,4 @@ func NewSharedDictStorage(zone unsafe.Pointer) apisix.Storage {
 }
 
 func (s *SharedDictStorage) Store(key, value string) {
-	if s.zone == nil {
-		log.Warnw("zone is nil")
-		return
-	}
-
-	var keyCStr = C.CString(key)
-	defer C.free(unsafe.Pointer(keyCStr))
-	var keyLen = C.size_t(len(key))
-
-	var valueCStr = C.CString(value)
-	defer C.free(unsafe.Pointer(valueCStr))
-	var valueLen = C.size_t(len(value))
-
-	errMsgBuf := make([]*C.char, 1)
-	var forcible = 0
-
-	C.ngx_http_lua_ffi_shdict_store(s.zone, 0x0004,
-		(*C.uchar)(unsafe.Pointer(keyCStr)), keyLen,
-		4,
-		(*C.uchar)(unsafe.Pointer(valueCStr)), valueLen,
-		0, 0, 0,
-		(**C.char)(unsafe.Pointer(&errMsgBuf[0])),
-		(*C.int)(unsafe.Pointer(&forcible)),
-	)
 }

@@ -27,11 +27,11 @@ create-bin-dir:
 
 .PHONY: build-amesh-sidecar
 build-amesh-sidecar: create-bin-dir
-	go build -o $(BINDIR)/amesh-sidecar ./cmd/sidecar
+	go build -o $(BINDIR)/amesh-sidecar -tags sidecar ./cmd/sidecar
 
 .PHONY: build-amesh-so
 build-amesh-so: create-bin-dir
-	go build -o $(BINDIR)/amesh.so -buildmode=c-shared ./cmd/dynamic
+	go build -o $(BINDIR)/amesh.so -buildmode=c-shared -tags shared_lib ./cmd/dynamic
 
 .PHONY: build-amesh-iptables-image
 build-amesh-iptables-image:

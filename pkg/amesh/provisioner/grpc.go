@@ -436,7 +436,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 		for _, ups := range newManifest.Upstreams {
 			events = append(events, types.Event{
 				Type:   types.EventUpdate,
-				Key:    fmt.Sprintf("/apisix/upstreams/%s", ups.Id),
+				Key:    fmt.Sprintf("/upstreams/%s", ups.Id),
 				Object: ups,
 			})
 		}

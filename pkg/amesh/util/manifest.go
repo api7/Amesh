@@ -56,7 +56,7 @@ func (m *Manifest) Size() int {
 func (m *Manifest) Events(evType types.EventType) []types.Event {
 	var events []types.Event
 	for _, r := range m.Routes {
-		key := fmt.Sprintf("/apisix/routes/%s", r.Id)
+		key := fmt.Sprintf("/routes/%s", r.Id)
 		if evType == types.EventDelete {
 			events = append(events, types.Event{
 				Type:      types.EventDelete,
@@ -72,7 +72,7 @@ func (m *Manifest) Events(evType types.EventType) []types.Event {
 		}
 	}
 	for _, u := range m.Upstreams {
-		key := fmt.Sprintf("/apisix/upstreams/%s", u.Id)
+		key := fmt.Sprintf("/upstreams/%s", u.Id)
 		if evType == types.EventDelete {
 			events = append(events, types.Event{
 				Type:      types.EventDelete,
