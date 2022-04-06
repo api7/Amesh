@@ -157,7 +157,7 @@ func (g *Agent) storeEvents(events []types.Event) {
 	for _, event := range events {
 		key := event.Key
 		if event.Type == types.EventDelete {
-			g.DataStorage.Store(key, "")
+			g.DataStorage.Delete(key)
 		} else {
 			data, err := json.Marshal(event.Object)
 			if err != nil {

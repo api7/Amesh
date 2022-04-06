@@ -16,4 +16,5 @@ package apisix
 
 type Storage interface {
 	Store(string, string)
+	Delete(string)
 }

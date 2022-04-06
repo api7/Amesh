@@ -77,3 +77,12 @@ func (s *SharedDictStorage) Store(key, value string) {
 		(*C.int)(unsafe.Pointer(&forcible)),
 	)
 }
+
+func (s *SharedDictStorage) Delete(key string) {
+	if s.zone == nil {
+		log.Warnw("zone is nil")
+		return
+	}
+
+	// TODO
+}

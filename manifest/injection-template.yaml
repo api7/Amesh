@@ -18,40 +18,45 @@ metadata:
     service.istio.io/canonical-revision: {{ index .ObjectMeta.Labels `service.istio.io/canonical-revision` | default (index .ObjectMeta.Labels `app.kubernetes.io/version`) | default (index .ObjectMeta.Labels `version`) | default "latest"  | quote }}
     istio.io/rev: {{ .Revision | default "default" | quote }}
 spec:
-#  initContainers:
-#  - name: amesh-init
-#    image: "{{ .Values.global.proxy_init.hub }}/{{ .Values.global.proxy_init.image }}:{{ .Values.global.proxy_init.tag }}"
-#    imagePullPolicy: Always
-#    args:
-#      - --apisix-inbound-capture-port
-#      - "9081"
-#      - --apisix-port
-#      - "9080"
-#      - --inbound-ports
-#      - "*"
-#      - --inbound-exclude-ports
-#      - "12379"
-#      - --outbound-ports
-#      - "*"
-#      - --outbound-exclude-ports
-#      - "12379,17520"
-#    securityContext:
-#      allowPrivilegeEscalation: true
-#      privileged: true
-#      capabilities:
-#        add:
-#          - NET_ADMIN
-#          - NET_RAW
-#        drop:
-#          - ALL
-#      readOnlyRootFilesystem: false
-#      runAsGroup: 0
-#      runAsNonRoot: false
-#      runAsUser: 0
-#    restartPolicy: Always
+  initContainers:
+  - name: amesh-init
+    image: "{{ .Values.global.proxy_init.hub }}/{{ .Values.global.proxy_init.image }}:{{ .Values.global.proxy_init.tag }}"
+    imagePullPolicy: Always
+    args:
+      - --apisix-inbound-capture-port
+      - "19081"
+      - --apisix-port
+      - "19080"
+      - --inbound-ports
+      - "*"
+      - --inbound-exclude-ports
+      - "15010"
+      - --outbound-ports
+      - "*"
+      - --outbound-exclude-ports
+      - "15010"
+    securityContext:
+      allowPrivilegeEscalation: true
+      privileged: true
+      capabilities:
+        add:
+          - NET_ADMIN
+          - NET_RAW
+        drop:
+          - ALL
+      readOnlyRootFilesystem: false
+      runAsGroup: 0
+      runAsNonRoot: false
+      runAsUser: 0
+    restartPolicy: Always
   containers:
   - name: istio-proxy
     image: "{{ .Values.global.proxy.hub }}/{{ .Values.global.proxy.image }}:{{ .Values.global.proxy.tag }}"
+    command: [ "sh", "-c" ]
+    args:
+      - |
+        /usr/bin/apisix init
+        /usr/local/openresty/bin/openresty -p /usr/local/apisix -g 'daemon off;' # remove /usr/bin/apisix init_etcd
 #    ports:
 #    - containerPort: 9080
 #      protocol: TCP

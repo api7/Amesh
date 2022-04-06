@@ -40,3 +40,6 @@ func NewSharedDictStorage(zone unsafe.Pointer) apisix.Storage {
 
 func (s *SharedDictStorage) Store(key, value string) {
 }
+
+func (s *SharedDictStorage) Delete(key string) {
+}
