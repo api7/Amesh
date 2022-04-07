@@ -23,6 +23,8 @@ spec:
     image: "{{ .Values.global.proxy_init.hub }}/{{ .Values.global.proxy_init.image }}:{{ .Values.global.proxy_init.tag }}"
     imagePullPolicy: Always
     args:
+      - --apisix-user
+      - nobody
       - --apisix-inbound-capture-port
       - "19081"
       - --apisix-port
@@ -73,6 +75,29 @@ spec:
 #      - debug
 #      - --xds-config-source
 #      - "grpc://istiod.istio-system.svc.cluster.local:15010"
+    securityContext:
+      allowPrivilegeEscalation: true
+      privileged: true
+      capabilities:
+        add:
+          - NET_ADMIN
+          - NET_RAW
+        drop:
+          - ALL
+      readOnlyRootFilesystem: false
+      runAsGroup: 0
+      runAsNonRoot: false
+      runAsUser: 0
+    ports:
+      - containerPort: 19080
+        protocol: TCP
+        name: http-outbound
+      - containerPort: 19081
+        protocol: TCP
+        name: http-inbound
+#      - name: tls
+#        containerPort: 19443
+#        protocol: TCP
     env:
     - name: AMESH_XDS_SOURCE
       value: "grpc://istiod.istio-system.svc.cluster.local:15010"

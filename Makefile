@@ -31,7 +31,7 @@ build-amesh-sidecar: create-bin-dir
 
 .PHONY: build-amesh-so
 build-amesh-so: create-bin-dir
-	CGO_ENABLED=0 go build -o $(BINDIR)/amesh.so -buildmode=c-shared -tags shared_lib ./cmd/dynamic/main.go
+	go build -o $(BINDIR)/amesh.so -buildmode=c-shared -gcflags=-shared -asmflags=-shared -installsuffix=_shared -a  -tags shared_lib ./cmd/dynamic
 
 .PHONY: build-amesh-iptables-image
 build-amesh-iptables-image:
@@ -56,6 +56,14 @@ ifeq ($(ENABLE_PROXY), true)
 else
 	@docker build -f Dockerfiles/luajit.Dockerfile -t $(AMESH_SO_IMAGE):$(AMESH_SO_IMAGE_TAG) .
 endif
+
+.PHONY: build-apisix-image
+build-apisix-image:
+	docker build \
+		-f Dockerfiles/apisix.Dockerfile \
+		-t amesh-apisix:dev \
+		--build-arg ENABLE_PROXY=true \
+		--build-arg LUAROCKS_SERVER=https://luarocks.cn .
 
 .PHONY verify-license:
 verify-license:

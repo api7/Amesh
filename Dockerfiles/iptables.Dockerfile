@@ -27,14 +27,16 @@ COPY cmd/iptables .
 RUN if [ "$ENABLE_PROXY" = "true" ]; then go env -w GOPROXY=https://goproxy.cn,direct ; fi \
     && make build-amesh-iptables
 
-FROM alpine:3.15.0
+FROM centos:7
 
-RUN apk add --no-cache --virtual .builddeps \
+RUN yum install -y --disableplugin=fastestmirror  \
     iptables \
     bash \
     libstdc++ \
     curl \
-    lsof
+    lsof \
+    patch \
+    which
 
 WORKDIR /usr/local/amesh
 

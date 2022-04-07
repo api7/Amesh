@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-FROM golang:1.16.5-alpine as amesh-sidecar-build-stage
-
-RUN apk add make
+FROM golang:1.16.5 as amesh-sidecar-build-stage
 
 ARG ENABLE_PROXY=false
 WORKDIR /amesh
