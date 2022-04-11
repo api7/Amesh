@@ -485,6 +485,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 }
 
 func (p *xdsProvisioner) sendEds(edsRequests util.StringSet) {
+	// TODO: merge calls to reduce duplicate requests?
 	dr := &discoveryv3.DiscoveryRequest{
 		Node:          p.node,
 		TypeUrl:       types.ClusterLoadAssignmentUrl,
