@@ -59,22 +59,6 @@ spec:
       - |
         /usr/bin/apisix init
         /usr/local/openresty/bin/openresty -p /usr/local/apisix -g 'daemon off;' # remove /usr/bin/apisix init_etcd
-#    ports:
-#    - containerPort: 9080
-#      protocol: TCP
-#      name: http-outbound
-#    - containerPort: 9081
-#      protocol: TCP
-#      name: http-inbound
-#    - containerPort: 17739
-#      protocol: TCP
-#      name: agent
-#    args:
-#      - run
-#      - --log-level
-#      - debug
-#      - --xds-config-source
-#      - "grpc://istiod.istio-system.svc.cluster.local:15010"
     securityContext:
       allowPrivilegeEscalation: true
       privileged: true
@@ -95,9 +79,6 @@ spec:
       - containerPort: 19081
         protocol: TCP
         name: http-inbound
-#      - name: tls
-#        containerPort: 19443
-#        protocol: TCP
     env:
     - name: AMESH_XDS_SOURCE
       value: "grpc://istiod.istio-system.svc.cluster.local:15010"

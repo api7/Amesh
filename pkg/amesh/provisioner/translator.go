@@ -101,38 +101,24 @@ func (p *xdsProvisioner) processClusterV3(res *any.Any) (*apisix.Upstream, error
 	return ups, nil
 }
 
-func (p *xdsProvisioner) processClusterLoadAssignmentV3(res *any.Any) (*apisix.Upstream, error) {
-	var cla endpointv3.ClusterLoadAssignment
-	err := anypb.UnmarshalTo(res, &cla, proto.UnmarshalOptions{
-		DiscardUnknown: true,
-	})
-	if err != nil {
-		p.logger.Errorw("failed to unmarshal ClusterLoadAssignment",
-			zap.Error(err),
-			zap.Any("resource", res),
-		)
-		return nil, err
-	}
-
-	p.logger.Debugw("got cluster load assignment response",
-		zap.Any("cla", &cla),
-	)
-
+func (p *xdsProvisioner) processClusterLoadAssignmentV3(cla *endpointv3.ClusterLoadAssignment) (*apisix.Upstream, error) {
 	ups, ok := p.upstreams[cla.ClusterName]
 	if !ok {
 		p.logger.Warnw("ClusterLoadAssignment referred cluster not found",
 			zap.String("reason", "cluster unknown"),
 			zap.String("cluster_name", cla.ClusterName),
-			zap.Any("resource", res),
 		)
 		return nil, errors.New("UnknownClusterName")
 	}
 
-	nodes, err := p.TranslateClusterLoadAssignment(&cla)
+	nodes, err := p.TranslateClusterLoadAssignment(cla)
+	if err == ErrorRequireFurtherEDS {
+		return nil, err
+	}
 	if err != nil {
 		p.logger.Errorw("failed to translate ClusterLoadAssignment",
 			zap.Error(err),
-			zap.Any("resource", res),
+			zap.Any("cla", cla),
 		)
 		return nil, err
 	}

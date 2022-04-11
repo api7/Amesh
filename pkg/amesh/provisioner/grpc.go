@@ -24,6 +24,7 @@ import (
 	"github.com/api7/gopkg/pkg/log"
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	endpointv3 "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
 	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	discoveryv3 "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
@@ -335,7 +336,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 				DiscardUnknown: true,
 			})
 			if err != nil {
-				p.logger.Errorw("unmarshal cluster failedd",
+				p.logger.Errorw("unmarshal cluster failed",
 					zap.Error(err),
 					zap.Any("resource", res),
 				)
@@ -364,7 +365,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			oldManifest.Upstreams = append(oldManifest.Upstreams, ups)
 		}
 		p.upstreams = newUps
-		if !p.edsRequiredClusters.Equal(oldEdsRequiredClusters) {
+		if !p.edsRequiredClusters.Equals(oldEdsRequiredClusters) {
 			p.logger.Infow("new EDS discovery request",
 				zap.Any("old_eds_required_clusters", oldEdsRequiredClusters),
 				zap.Any("eds_required_clusters", p.edsRequiredClusters),
@@ -372,13 +373,46 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			p.sendEds(p.edsRequiredClusters)
 		}
 	case types.ClusterLoadAssignmentUrl:
+		requireEds := util.StringSet{}
+
 		for _, res := range resp.GetResources() {
-			ups, err := p.processClusterLoadAssignmentV3(res)
+			var cla endpointv3.ClusterLoadAssignment
+			err := anypb.UnmarshalTo(res, &cla, proto.UnmarshalOptions{
+				DiscardUnknown: true,
+			})
+			if err != nil {
+				p.logger.Errorw("failed to unmarshal ClusterLoadAssignment",
+					zap.Error(err),
+					zap.Any("resource", res),
+				)
+				continue
+			}
+
+			p.logger.Debugw("got cluster load assignment response",
+				zap.Any("cla", &cla),
+			)
+
+			ups, err := p.processClusterLoadAssignmentV3(&cla)
+			if err == ErrorRequireFurtherEDS {
+				// TODO process this
+				if !strings.Contains(cla.ClusterName, "istio-system.svc.cluster.local") &&
+					!strings.Contains(cla.ClusterName, "kube-system.svc.cluster.local") {
+					requireEds.Add(cla.ClusterName)
+				}
+				continue
+			}
 			if err != nil {
 				return err
 			}
 			p.upstreams[ups.Name] = ups
 			newManifest.Upstreams = append(newManifest.Upstreams, ups)
+		}
+
+		if len(requireEds) > 0 {
+			p.logger.Infow("empty endpoint, new EDS discovery request",
+				zap.Any("eds_required_clusters", requireEds),
+			)
+			p.sendEds(requireEds)
 		}
 	case types.ListenerUrl:
 		var (

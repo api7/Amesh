@@ -24,8 +24,8 @@ func (set StringSet) Add(e string) {
 	set[e] = struct{}{}
 }
 
-// Equal compares two string set and checks whether they are identical.
-func (set StringSet) Equal(set2 StringSet) bool {
+// Equals compares two string set and checks whether they are identical.
+func (set StringSet) Equals(set2 StringSet) bool {
 	if len(set) != len(set2) {
 		return false
 	}

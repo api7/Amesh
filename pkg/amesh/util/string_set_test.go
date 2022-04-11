@@ -28,9 +28,9 @@ func TestStringSet(t *testing.T) {
 	s2.Add("123")
 	s2.Add("456")
 
-	assert.Equal(t, s.Equal(s2), true)
+	assert.Equal(t, s.Equals(s2), true)
 	s2.Add("111")
-	assert.Equal(t, s.Equal(s2), false)
+	assert.Equal(t, s.Equals(s2), false)
 }
 
 func TestStringSetToArray(t *testing.T) {

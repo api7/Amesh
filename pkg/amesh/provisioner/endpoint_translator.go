@@ -15,6 +15,8 @@
 package provisioner
 
 import (
+	"errors"
+
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	endpointv3 "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
 	"go.uber.org/zap"
@@ -22,8 +24,15 @@ import (
 	"github.com/api7/amesh/pkg/apisix"
 )
 
+var (
+	ErrorRequireFurtherEDS = errors.New("require further eds")
+)
+
 func (p *xdsProvisioner) TranslateClusterLoadAssignment(la *endpointv3.ClusterLoadAssignment) ([]*apisix.Node, error) {
 	var nodes []*apisix.Node
+	if len(la.GetEndpoints()) == 0 {
+		return nil, ErrorRequireFurtherEDS
+	}
 	for _, eps := range la.GetEndpoints() {
 		var weight int32
 		if eps.GetLoadBalancingWeight() != nil {

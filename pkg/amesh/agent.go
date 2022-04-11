@@ -153,7 +153,9 @@ func (g *Agent) storeEvents(events []types.Event) {
 	if len(events) == 0 {
 		return
 	}
+	timestamp := strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10)
 
+	g.logger.Debugw("store new events: begin")
 	for _, event := range events {
 		key := event.Key
 		if event.Type == types.EventDelete {
@@ -174,11 +176,11 @@ func (g *Agent) storeEvents(events []types.Event) {
 			)
 		}
 	}
+	g.logger.Debugw("store new events: end")
 
-	timestamp := strconv.FormatInt(time.Now().UnixNano()/int64(time.Second), 10)
 	g.VersionStorage.Store("version", timestamp)
 
-	g.logger.Debugw("mark version",
+	g.logger.Debugw("store new events: mark version",
 		zap.String("version", timestamp),
 	)
 }
