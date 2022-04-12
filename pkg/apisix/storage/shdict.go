@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-package apisix
+//go:build shared_lib
+// +build shared_lib
+
+package storage
 
 /*
 #cgo LDFLAGS: -shared
@@ -29,24 +32,31 @@ import "C"
 import (
 	"unsafe"
 
-	"github.com/api7/amesh/pkg/amesh"
+	"github.com/api7/gopkg/pkg/log"
+
+	"github.com/api7/amesh/pkg/apisix"
 )
 
 var (
-	_ amesh.Storage = (*SharedDictStorage)(nil)
+	_ apisix.Storage = (*SharedDictStorage)(nil)
 )
 
 type SharedDictStorage struct {
 	zone unsafe.Pointer
 }
 
-func NewSharedDictStorage(zone unsafe.Pointer) amesh.Storage {
+func NewSharedDictStorage(zone unsafe.Pointer) apisix.Storage {
 	return &SharedDictStorage{
 		zone: zone,
 	}
 }
 
 func (s *SharedDictStorage) Store(key, value string) {
+	if s.zone == nil {
+		log.Warnw("zone is nil")
+		return
+	}
+
 	var keyCStr = C.CString(key)
 	defer C.free(unsafe.Pointer(keyCStr))
 	var keyLen = C.size_t(len(key))
@@ -66,4 +76,13 @@ func (s *SharedDictStorage) Store(key, value string) {
 		(**C.char)(unsafe.Pointer(&errMsgBuf[0])),
 		(*C.int)(unsafe.Pointer(&forcible)),
 	)
+}
+
+func (s *SharedDictStorage) Delete(key string) {
+	if s.zone == nil {
+		log.Warnw("zone is nil")
+		return
+	}
+
+	// TODO
 }

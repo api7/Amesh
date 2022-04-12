@@ -16,22 +16,23 @@ package amesh
 
 import (
 	"context"
-	"github.com/api7/amesh/pkg/amesh/provisioner"
-	"github.com/api7/gopkg/pkg/log"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
+	"encoding/json"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
 
-	"github.com/api7/amesh/pkg/apisix"
-)
+	"github.com/api7/gopkg/pkg/log"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 
-type Storage interface {
-	Store(string, string)
-}
+	"github.com/api7/amesh/pkg/amesh/provisioner"
+	"github.com/api7/amesh/pkg/amesh/types"
+	"github.com/api7/amesh/pkg/apisix"
+	"github.com/api7/amesh/pkg/apisix/storage"
+)
 
 type Agent struct {
 	ctx       context.Context
@@ -39,9 +40,10 @@ type Agent struct {
 	xdsSource string
 	logger    *log.Logger
 
-	provisioner provisioner.Provisioner
+	provisioner types.Provisioner
 
-	TargetStorage Storage
+	DataStorage    apisix.Storage
+	VersionStorage apisix.Storage
 }
 
 func getNamespace() string {
@@ -77,7 +79,7 @@ func getIpAddr() (string, error) {
 	return ipAddr, nil
 }
 
-func NewAgent(ctx context.Context, src string, zone unsafe.Pointer, logLevel, logOutput string) (*Agent, error) {
+func NewAgent(ctx context.Context, src string, dataZone, versionZone unsafe.Pointer, logLevel, logOutput string) (*Agent, error) {
 	ipAddr, err := getIpAddr()
 	if err != nil {
 		return nil, err
@@ -105,12 +107,13 @@ func NewAgent(ctx context.Context, src string, zone unsafe.Pointer, logLevel, lo
 	}
 
 	return &Agent{
-		ctx:           ctx,
-		version:       time.Now().Unix(),
-		xdsSource:     src,
-		logger:        logger,
-		provisioner:   p,
-		TargetStorage: apisix.NewSharedDictStorage(zone),
+		ctx:            ctx,
+		version:        time.Now().Unix(),
+		xdsSource:      src,
+		logger:         logger,
+		provisioner:    p,
+		DataStorage:    storage.NewSharedDictStorage(dataZone),
+		VersionStorage: storage.NewSharedDictStorage(versionZone),
 	}, nil
 }
 
@@ -131,16 +134,53 @@ func (g *Agent) Run(stop <-chan struct{}) error {
 
 loop:
 	for {
-		events, ok := <-g.provisioner.Channel()
-		if !ok {
+		select {
+		case <-stop:
+			g.logger.Info("stop signal received, grpc event dispatching stopped")
 			break loop
+		case events, ok := <-g.provisioner.EventsChannel():
+			if !ok {
+				break loop
+			}
+			g.storeEvents(events)
 		}
-		g.storeEvents(events)
 	}
 
 	return nil
 }
 
-func (g *Agent) storeEvents(events []provisioner.Event) {
+func (g *Agent) storeEvents(events []types.Event) {
+	if len(events) == 0 {
+		return
+	}
+	timestamp := strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10)
 
+	g.logger.Debugw("store new events: begin")
+	for _, event := range events {
+		key := event.Key
+		if event.Type == types.EventDelete {
+			g.DataStorage.Delete(key)
+		} else {
+			data, err := json.Marshal(event.Object)
+			if err != nil {
+				g.logger.Errorw("failed to marshal events",
+					zap.Error(err),
+				)
+				continue
+			}
+			dataStr := string(data)
+			g.DataStorage.Store(key, dataStr)
+			g.logger.Debugw("store new events",
+				zap.String("key", key),
+				zap.String("value", dataStr),
+			)
+		}
+	}
+	g.logger.Debugw("store new events: end")
+
+	g.VersionStorage.Store("version", timestamp)
+
+	g.logger.Debugw("store new events: mark version",
+		zap.String("version", timestamp),
+	)
 }

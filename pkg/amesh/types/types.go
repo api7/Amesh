@@ -12,13 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-package provisioner
+package types
+
+var (
+	// RouteConfigurationUrl is the RDS type url.
+	RouteConfigurationUrl = "type.googleapis.com/envoy.config.route.v3.RouteConfiguration"
+	// ClusterUrl is the Cluster type url.
+	ClusterUrl = "type.googleapis.com/envoy.config.cluster.v3.Cluster"
+	// ClusterLoadAssignmentUrl is the Cluster type url.
+	ClusterLoadAssignmentUrl = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment"
+	// ListenerUrl is the Listener type url.
+	ListenerUrl = "type.googleapis.com/envoy.config.listener.v3.Listener"
+)
 
 // Provisioner provisions config event.
 // The source type can be xDS or UDPA or whatever anything else.
 type Provisioner interface {
 	// Channel returns a readonly channel where caller can get events.
-	Channel() <-chan []Event
+	EventsChannel() <-chan []Event
 	// Run launches the provisioner.
 	Run(<-chan struct{}) error
 }
@@ -38,6 +49,7 @@ var (
 // Event describes a specific event generated from the provisioner.
 type Event struct {
 	Type   EventType
+	Key    string
 	Object interface{}
 	// Tombstone is only valid for delete event,
 	// in such a case it stands for the final state
