@@ -14,8 +14,8 @@
 --
 local ffi = require "ffi"
 
-local amesh = ffi.load("/amesh/amesh.so")
--- local amesh = ffi.load("./amesh.so")
+local amesh = ffi.load("/amesh/libxds.so")
+-- local amesh = ffi.load("./libxds.so")
 
 ffi.cdef[[
 typedef signed char GoInt8;

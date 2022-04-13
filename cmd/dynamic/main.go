@@ -34,8 +34,8 @@ func Log(msg string) {
 	log.Infof(msg)
 }
 
-//export StartAmesh
-func StartAmesh(src string) {
+//export StartTestAmesh
+func StartTestAmesh(src string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	agent, err := amesh.NewAgent(ctx, src, nil, nil, "debug", "stderr")
 	if err != nil {
@@ -56,8 +56,9 @@ func StartAmesh(src string) {
 	}()
 }
 
-//export StartAmesh2
-func StartAmesh2(src string, dataZone, versionZone unsafe.Pointer) {
+//export initial
+func initial(dataZone, versionZone unsafe.Pointer) {
+	src := "grpc://istiod.istio-system.svc.cluster.local:15010"
 	ctx, cancel := context.WithCancel(context.Background())
 	agent, err := amesh.NewAgent(ctx, src, dataZone, versionZone, "debug", "stderr")
 	if err != nil {
