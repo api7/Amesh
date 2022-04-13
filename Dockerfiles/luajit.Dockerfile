@@ -31,7 +31,7 @@ FROM nickblah/luajit:2.0.5
 
 WORKDIR /amesh
 
-COPY --from=amesh-sidecar-build-stage /amesh/bin/amesh.so ./
+COPY --from=amesh-sidecar-build-stage /amesh/bin/libxds.so ./
 COPY cmd/lua/test.lua .
 
 

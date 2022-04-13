@@ -31,7 +31,7 @@ build-amesh-sidecar: create-bin-dir
 
 .PHONY: build-amesh-so
 build-amesh-so: create-bin-dir
-	go build -o $(BINDIR)/amesh.so -buildmode=c-shared -gcflags=-shared -asmflags=-shared -installsuffix=_shared -a  -tags shared_lib ./cmd/dynamic
+	go build -o $(BINDIR)/libxds.so -buildmode=c-shared -gcflags=-shared -asmflags=-shared -installsuffix=_shared -a  -tags shared_lib ./cmd/dynamic
 
 .PHONY: build-amesh-iptables-image
 build-amesh-iptables-image:
