@@ -93,11 +93,11 @@ docker build -t apisix:custom -f ./Dockerfile .
 
 ### 安装 Istio
 
-范例使用 1.9.1 版本的 Istio。
+范例使用 1.13.1 版本的 Istio。
 
 ```bash
 git clone git@github.com:istio/istio.git 
-git checkout 1.9.1
+git checkout 1.13.1
 ```
 
 使用 Amesh 的配置替换 Istio 的默认配置：
@@ -116,7 +116,7 @@ export YOUR_REGISTRY="10.0.0.20:5000"
 安装 Istio：
 
 ```bash
-export ISTIO_RELEASE=1.9.1
+export ISTIO_RELEASE=1.13.1
 helm install istio-base --namespace istio-system ./base
 helm install istio-discovery \
 --namespace istio-system \

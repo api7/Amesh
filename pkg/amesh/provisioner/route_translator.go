@@ -114,6 +114,9 @@ func (p *xdsProvisioner) translateVirtualHost(prefix string, vhost *routev3.Virt
 			name = "<anon>"
 		}
 		priority := _defaultRoutePriority
+		if len(hosts) == 0 {
+			priority = 0
+		}
 		// This is for istio.
 		// use the default and lowest priority for the "allow_any" route.
 		if name == "allow_any" {

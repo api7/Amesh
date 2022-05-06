@@ -91,11 +91,11 @@ docker build -t apisix:custom -f ./Dockerfile .
 
 ### Install Istio
 
-This document uses Istio v1.9.1.
+This document uses Istio v1.13.1.
 
 ```bash
 git clone git@github.com:istio/istio.git 
-git checkout 1.9.1
+git checkout 1.13.1
 ```
 
 Replace the default injection template of Istio with the Amesh configuration.
@@ -114,7 +114,7 @@ export YOUR_REGISTRY="10.0.0.20:5000"
 To install Istio：
 
 ```bash
-export ISTIO_RELEASE=1.9.1
+export ISTIO_RELEASE=1.13.1
 helm install istio-base --namespace istio-system ./base
 helm install istio-discovery \
 --namespace istio-system \

@@ -395,8 +395,20 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			ups, err := p.processClusterLoadAssignmentV3(&cla)
 			if err == ErrorRequireFurtherEDS {
 				// TODO process this
-				if !strings.Contains(cla.ClusterName, "istio-system.svc.cluster.local") &&
-					!strings.Contains(cla.ClusterName, "kube-system.svc.cluster.local") {
+				ignoredClusterName := []string{
+					"kubernetes.default.svc.cluster.local",
+					"kube-system.svc.cluster.local",
+					"istio-system.svc.cluster.local",
+				}
+
+				ignored := false
+				for _, clusterName := range ignoredClusterName {
+					if strings.Contains(cla.ClusterName, clusterName) {
+						ignored = true
+						break
+					}
+				}
+				if !ignored {
 					requireEds.Add(cla.ClusterName)
 				}
 				continue
