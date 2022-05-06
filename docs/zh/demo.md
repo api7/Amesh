@@ -6,7 +6,7 @@
 
 ```bash
 docker pull ghcr.io/api7/amesh-iptables:v0.0.1
-docker pull ghcr.io/api7/amesh-apisix:v0.0.1
+docker pull ghcr.io/api7/amesh-apisix:v0.0.2
 ```
 
 如需自行编译，可参考下文。
