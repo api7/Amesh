@@ -12,7 +12,7 @@ The Amesh project is currently under active development and is considered to be 
 
 ## Quick Start
 
-Refer to the document [Amesh Demo](./docs/en/demo) to quickly run the demo with Istio.
+Refer to the document [Amesh Demo](./docs/en/demo.md) to quickly run the demo with Istio.
 
 ## How It Works
 
