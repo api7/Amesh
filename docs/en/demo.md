@@ -124,7 +124,7 @@ helm install istio-discovery \
   --set global.proxy_init.image=amesh-iptables \
   --set global.proxy_init.tag=dev \
   --set global.proxy.hub="$YOUR_REGISTRY" \
-  --set global.proxy.image=apisix \
+  --set global.proxy.image=amesh-apisix \
   --set global.proxy.tag=custom \
   --set global.imagePullPolicy=IfNotPresent \
   --set global.hub="docker.io/istio" \
