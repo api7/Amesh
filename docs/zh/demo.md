@@ -5,8 +5,8 @@
 获取已打包好的镜像：
 
 ```bash
-docker pull ghcr.io/api7/amesh-iptables:v0.0.1
-docker pull ghcr.io/api7/amesh-apisix:v0.0.2
+docker pull ghcr.io/api7/amesh/amesh-iptables:v0.0.1
+docker pull ghcr.io/api7/amesh/amesh-apisix:v0.0.2
 ```
 
 如需自行编译，可参考下文。
@@ -25,7 +25,7 @@ make build-amesh-so-image
 构建 Amesh 专用的基础 APISIX 镜像，后续将会使用到：
 
 ```bash
-make build-amesh-apisix-image
+make build-apisix-image
 ```
 
 ### 编译 APISIX 镜像
