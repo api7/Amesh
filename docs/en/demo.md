@@ -5,8 +5,8 @@
 To get a pre-built image.：
 
 ```bash
-docker pull ghcr.io/api7/amesh-iptables:v0.0.1
-docker pull ghcr.io/api7/amesh-apisix:v0.0.2
+docker pull ghcr.io/api7/amesh/amesh-iptables:v0.0.1
+docker pull ghcr.io/api7/amesh/amesh-apisix:v0.0.2
 ```
 
 If you want to build images yourself, please refer to the following section.
@@ -25,7 +25,7 @@ These two commands will package the `amesh-iptables:v0.0.1` image used by the in
 Build the base APISIX image for Amesh, which will be used later,
 
 ```bash
-make build-amesh-apisix-image
+make build-apisix-image
 ```
 
 ### Build APISIX Image for Amesh
