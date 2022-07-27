@@ -5,7 +5,7 @@
 To get a pre-built image.：
 
 ```bash
-docker pull ghcr.io/api7/amesh/amesh-iptables:v0.0.1
+docker pull ghcr.io/api7/amesh/amesh-iptables:v0.0.2
 docker pull ghcr.io/api7/amesh/amesh-apisix:v0.0.2
 ```
 
@@ -20,7 +20,7 @@ make build-amesh-iptables-image
 make build-amesh-so-image
 ```
 
-These two commands will package the `amesh-iptables:v0.0.1` image used by the init container, and the dynamic library `libxds.so` that will be used by APISIX.
+These two commands will package the `amesh-iptables:v0.0.2` image used by the init container, and the dynamic library `libxds.so` that will be used by APISIX.
 
 Build the base APISIX image for Amesh, which will be used later,
 

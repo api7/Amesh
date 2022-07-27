@@ -23,6 +23,7 @@ import (
 	"istio.io/istio/tools/istio-iptables/pkg/builder"
 	iptablesconf "istio.io/istio/tools/istio-iptables/pkg/config"
 	"istio.io/istio/tools/istio-iptables/pkg/dependencies"
+	"istio.io/istio/tools/istio-iptables/pkg/log"
 )
 
 const (
@@ -34,7 +35,7 @@ const (
 )
 
 type iptablesConstructor struct {
-	iptables *builder.IptablesBuilderImpl
+	iptables *builder.IptablesBuilder
 	cfg      *iptablesconf.Config
 	dep      dependencies.Dependencies
 }
@@ -74,7 +75,7 @@ if outbound TCP traffic (say the destination port is 80) is desired to be interc
 			cfg.ProxyGID = usr.Gid
 
 			ic := &iptablesConstructor{
-				iptables: builder.NewIptablesBuilder(),
+				iptables: builder.NewIptablesBuilder(&cfg),
 				cfg:      &cfg,
 				dep:      dep,
 			}
@@ -101,10 +102,10 @@ if outbound TCP traffic (say the destination port is 80) is desired to be interc
 
 func (ic *iptablesConstructor) run() {
 	ic.iptables.AppendRuleV4(
-		RedirectChain, "nat", "-p", "tcp", "-j", "REDIRECT", "--to-ports", ic.cfg.ProxyPort,
+		log.UndefinedCommand, RedirectChain, "nat", "-p", "tcp", "-j", "REDIRECT", "--to-ports", ic.cfg.ProxyPort,
 	)
 	ic.iptables.AppendRuleV4(
-		InboundRedirectChain, "nat", "-p", "tcp",
+		log.UndefinedCommand, InboundRedirectChain, "nat", "-p", "tcp",
 		"-j", "REDIRECT", "--to-ports", ic.cfg.InboundCapturePort,
 	)
 
@@ -119,21 +120,21 @@ func (ic *iptablesConstructor) insertInboundRules() {
 	if ic.cfg.InboundPortsInclude == "" {
 		return
 	}
-	ic.iptables.AppendRuleV4(PreRoutingChain, "nat", "-p", "tcp", "-j", InboundChain)
+	ic.iptables.AppendRuleV4(log.UndefinedCommand, PreRoutingChain, "nat", "-p", "tcp", "-j", InboundChain)
 
 	if ic.cfg.InboundPortsInclude == "*" {
 		// Makes sure SSH is not redirected
-		ic.iptables.AppendRuleV4(InboundChain, "nat", "-p", "tcp", "--dport", "22", "-j", "RETURN")
+		ic.iptables.AppendRuleV4(log.UndefinedCommand, InboundChain, "nat", "-p", "tcp", "--dport", "22", "-j", "RETURN")
 		if ic.cfg.InboundPortsExclude != "" {
 			for _, port := range split(ic.cfg.InboundPortsExclude) {
-				ic.iptables.AppendRuleV4(InboundChain, "nat", "-p", "tcp", "--dport", port, "-j", "RETURN")
+				ic.iptables.AppendRuleV4(log.UndefinedCommand, InboundChain, "nat", "-p", "tcp", "--dport", port, "-j", "RETURN")
 			}
 		}
-		ic.iptables.AppendRuleV4(InboundChain, "nat", "-p", "tcp", "-j", InboundRedirectChain)
+		ic.iptables.AppendRuleV4(log.UndefinedCommand, InboundChain, "nat", "-p", "tcp", "-j", InboundRedirectChain)
 	} else {
 		for _, port := range split(ic.cfg.InboundPortsInclude) {
 			ic.iptables.AppendRuleV4(
-				InboundChain, "nat", "-p", "tcp", "--dport", port, "-j", InboundRedirectChain,
+				log.UndefinedCommand, InboundChain, "nat", "-p", "tcp", "--dport", port, "-j", InboundRedirectChain,
 			)
 		}
 	}
@@ -147,17 +148,17 @@ func (ic *iptablesConstructor) insertOutboundRules() {
 		if ic.cfg.OutboundPortsExclude != "" {
 			for _, port := range split(ic.cfg.OutboundPortsExclude) {
 				ic.iptables.AppendRuleV4(
-					OutputChain, "nat", "-p", "tcp", "--dport", port, "-j", "RETURN",
+					log.UndefinedCommand, OutputChain, "nat", "-p", "tcp", "--dport", port, "-j", "RETURN",
 				)
 			}
 		}
 		ic.iptables.AppendRuleV4(
-			OutputChain, "nat", "-p", "tcp", "-j", RedirectChain,
+			log.UndefinedCommand, OutputChain, "nat", "-p", "tcp", "-j", RedirectChain,
 		)
 	} else {
 		for _, port := range split(ic.cfg.OutboundPortsInclude) {
 			ic.iptables.AppendRuleV4(
-				OutputChain, "nat", "-p", "tcp", "--dport", port, "-j", RedirectChain,
+				log.UndefinedCommand, OutputChain, "nat", "-p", "tcp", "--dport", port, "-j", RedirectChain,
 			)
 		}
 
@@ -165,9 +166,9 @@ func (ic *iptablesConstructor) insertOutboundRules() {
 }
 
 func (ic *iptablesConstructor) insertSkipRules() {
-	ic.iptables.AppendRuleV4(OutputChain, "nat", "-o", "lo", "!", "-d",
+	ic.iptables.AppendRuleV4(log.UndefinedCommand, OutputChain, "nat", "-o", "lo", "!", "-d",
 		"127.0.0.1/32", "-m", "owner", "--uid-owner", ic.cfg.ProxyUID, "-j", "RETURN")
-	ic.iptables.AppendRuleV4(OutputChain, "nat", "-m", "owner", "--gid-owner",
+	ic.iptables.AppendRuleV4(log.UndefinedCommand, OutputChain, "nat", "-m", "owner", "--gid-owner",
 		ic.cfg.ProxyGID, "-j", "RETURN")
 }
 

@@ -5,7 +5,7 @@
 获取已打包好的镜像：
 
 ```bash
-docker pull ghcr.io/api7/amesh/amesh-iptables:v0.0.1
+docker pull ghcr.io/api7/amesh/amesh-iptables:v0.0.2
 docker pull ghcr.io/api7/amesh/amesh-apisix:v0.0.2
 ```
 
@@ -20,7 +20,7 @@ make build-amesh-iptables-image
 make build-amesh-so-image
 ```
 
-这两行命令会打包 init container 所使用的 `amesh-iptables:v0.0.1` 镜像，以及后续 APISIX 将用到的动态链接库 `libxds.so`。
+这两行命令会打包 init container 所使用的 `amesh-iptables:v0.0.2` 镜像，以及后续 APISIX 将用到的动态链接库 `libxds.so`。
 
 构建 Amesh 专用的基础 APISIX 镜像，后续将会使用到：
 
