@@ -16,6 +16,7 @@ package provisioner
 
 import (
 	"errors"
+	"reflect"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	endpointv3 "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
@@ -62,19 +63,22 @@ func (p *xdsProvisioner) TranslateClusterLoadAssignment(la *endpointv3.ClusterLo
 					case *corev3.SocketAddress_PortValue:
 						node.Port = int32(port.PortValue)
 					case *corev3.SocketAddress_NamedPort:
-						p.logger.Warnw("ignore endpoint with unsupported named port",
+						p.logger.Warnw("ignore endpoint with unsupported named port type",
+							zap.Any("type", reflect.TypeOf(port)),
 							zap.Any("endpoint", ep),
 						)
 						continue
 					}
 				default:
 					p.logger.Warnw("ignore endpoint with unsupported address type",
+						zap.Any("type", reflect.TypeOf(addr)),
 						zap.Any("endpoint", ep),
 					)
 					continue
 				}
 			default:
-				p.logger.Warnw("ignore endpoint with unknown endpoint type ",
+				p.logger.Warnw("ignore endpoint with unsupported endpoint type ",
+					zap.Any("type", reflect.TypeOf(identifier)),
 					zap.Any("endpoint", ep),
 				)
 				continue
@@ -83,7 +87,7 @@ func (p *xdsProvisioner) TranslateClusterLoadAssignment(la *endpointv3.ClusterLo
 				zap.Any("node", node),
 				zap.Any("endpoint", ep),
 			)
-			// Currently Apache APISIX doesn't use the metadata field.
+			// Currently, Apache APISIX doesn't use the metadata field.
 			// So we don't pass ep.Metadata.
 			nodes = append(nodes, node)
 		}

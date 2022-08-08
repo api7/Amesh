@@ -58,7 +58,7 @@ func CompareRoutes(r1, r2 []*Route) (added, deleted, updated []*Route) {
 					zap.NamedError("error_new", errN),
 				)
 				updated = append(updated, rn)
-			} else if bytes.Equal(roJson, rnJson) {
+			} else if !bytes.Equal(roJson, rnJson) {
 				updated = append(updated, rn)
 			}
 		}
@@ -101,7 +101,7 @@ func CompareUpstreams(u1, u2 []*Upstream) (added, deleted, updated []*Upstream) 
 					zap.NamedError("error_new", errN),
 				)
 				updated = append(updated, un)
-			} else if bytes.Equal(uoJson, unJson) {
+			} else if !bytes.Equal(uoJson, unJson) {
 				updated = append(updated, un)
 			}
 		}
