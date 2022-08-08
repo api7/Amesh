@@ -92,7 +92,7 @@ func (p *xdsProvisioner) translateVirtualHost(prefix string, vhost *routev3.Virt
 		// TODO CaseSensitive field.
 		sensitive := route.GetMatch().CaseSensitive
 		if sensitive != nil && !sensitive.GetValue() {
-			// Apache APISIX doesn't support case insensitive URI match,
+			// Apache APISIX doesn't support case-insensitive URI match,
 			// so these routes should be neglected.
 			p.logger.Warnw("ignore route with case insensitive match",
 				zap.Any("route", route),
@@ -230,21 +230,44 @@ func (p *xdsProvisioner) getHeadersMatchVars(route *routev3.Route) ([]*apisix.Va
 			name = "http_" + strings.ReplaceAll(name, "-", "_")
 		}
 
-		switch header.HeaderMatchSpecifier.(type) {
+		switch v := header.HeaderMatchSpecifier.(type) {
+		case *routev3.HeaderMatcher_StringMatch:
+			// TODO support case sensitive options
+			//insensitive := v.StringMatch.IgnoreCase
+
+			switch m := v.StringMatch.MatchPattern.(type) {
+			case *matcherv3.StringMatcher_Exact:
+				value = "^" + m.Exact + "$"
+			case *matcherv3.StringMatcher_Prefix:
+				value = "^" + m.Prefix
+			case *matcherv3.StringMatcher_Suffix:
+				value = m.Suffix + "$"
+			case *matcherv3.StringMatcher_SafeRegex:
+				value = m.SafeRegex.Regex
+			case *matcherv3.StringMatcher_Contains:
+				value = m.Contains
+			default:
+				p.logger.Warnw("unsupported string matcher in header matcher",
+					zap.Any("matcher", m),
+					zap.Any("route", route),
+				)
+				return nil, true
+			}
 		case *routev3.HeaderMatcher_ContainsMatch:
-			value = header.HeaderMatchSpecifier.(*routev3.HeaderMatcher_ContainsMatch).ContainsMatch
+			value = v.ContainsMatch
 		case *routev3.HeaderMatcher_ExactMatch:
-			value = "^" + header.HeaderMatchSpecifier.(*routev3.HeaderMatcher_ExactMatch).ExactMatch + "$"
+			value = "^" + v.ExactMatch + "$"
 		case *routev3.HeaderMatcher_PrefixMatch:
-			value = "^" + header.HeaderMatchSpecifier.(*routev3.HeaderMatcher_PrefixMatch).PrefixMatch
+			value = "^" + v.PrefixMatch
 		case *routev3.HeaderMatcher_PresentMatch:
 		case *routev3.HeaderMatcher_SafeRegexMatch:
-			value = header.HeaderMatchSpecifier.(*routev3.HeaderMatcher_SafeRegexMatch).SafeRegexMatch.Regex
+			value = v.SafeRegexMatch.Regex
 		case *routev3.HeaderMatcher_SuffixMatch:
-			value = header.HeaderMatchSpecifier.(*routev3.HeaderMatcher_SuffixMatch).SuffixMatch + "$"
+			value = v.SuffixMatch + "$"
 		default:
 			// TODO Some other HeaderMatchers can be implemented else.
 			p.logger.Warnw("ignore route with unexpected header matcher",
+				zap.Any("matcher", v),
 				zap.Any("route", route),
 			)
 			return nil, true
