@@ -50,4 +50,5 @@ header:
     - 'scripts'
     - 'charts'
     - '**/*.patch'
+    - '**/*.yaml'
   comment: never

@@ -110,9 +110,6 @@ e2e-test:
 		go env -w GOFLAGS="-mod=mod" && \
 		ginkgo -cover -coverprofile=coverage.txt -r --randomizeSuites --randomizeAllSpecs --trace -p --nodes=$(E2E_CONCURRENCY)
 
-.PHONY: full-e2e
-full-e2e: kind-up prepare-images push-images e2e-test
-
 .PHONY verify-license:
 verify-license:
 	@docker pull apache/skywalking-eyes

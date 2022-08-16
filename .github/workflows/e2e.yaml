@@ -8,8 +8,39 @@ on:
     branches:
       - main
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+      go: ${{ steps.filter.outputs.go }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            docs:
+              - 'docs/**/*'
+              - '*.md'
+            go:
+              - '*.go'
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'Makefile'
+              - 'Dockerfiles/'
+              - '*.Dockerfile'
+              - 'e2e/**'
+              - 'scripts/**'
   e2e-test:
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     steps:
       - uses: actions/checkout@v2
       - name: Install kind
@@ -21,15 +52,29 @@ jobs:
         uses: actions/setup-go@v1
         with:
           go-version: '1.18'
+
       - name: Install ginkgo
         run: |
-          go get -u github.com/onsi/ginkgo/ginkgo
+          go install github.com/onsi/ginkgo/v2/ginkgo@v2.1.4
           sudo cp ~/go/bin/ginkgo /usr/local/bin
+
+      - name: Create K8s cluster
+        shell: bash
+        run: |
+          make kind-up
+          kubectl wait --for=condition=Ready nodes --all
+
+      - name: Prepare Images
+        run: |
+          make prepare-images
+          make push-images
+
       - name: Run e2e test cases
         working-directory: ./
         run: |
           cd e2e && go mod download && cd ..
           make e2e-test E2E_CONCURRENCY=1
+
       - name: upload coverage profile
         working-directory: ./e2e
         run: |
