@@ -20,7 +20,6 @@ metadata:
 spec:
   initContainers:
   - name: amesh-init
-
 {{- if contains "/" .Values.global.proxy_init.image }}
     image: "{{ .Values.global.proxy_init.image }}"
 {{- else }}
@@ -58,7 +57,6 @@ spec:
     restartPolicy: Always
   containers:
   - name: istio-proxy
-
 {{- if contains "/" .Values.global.proxy.image }}
     image: "{{ .Values.global.proxy.image }}"
 {{- else }}

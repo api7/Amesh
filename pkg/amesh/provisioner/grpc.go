@@ -373,7 +373,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			p.sendEds(p.edsRequiredClusters)
 		}
 	case types.ClusterLoadAssignmentUrl:
-		requireEds := util.StringSet{}
+		requireFurtherEds := util.StringSet{}
 
 		for _, res := range resp.GetResources() {
 			var cla endpointv3.ClusterLoadAssignment
@@ -409,7 +409,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 					}
 				}
 				if !ignored {
-					requireEds.Add(cla.ClusterName)
+					requireFurtherEds.Add(cla.ClusterName)
 				}
 				continue
 			}
@@ -420,11 +420,12 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			newManifest.Upstreams = append(newManifest.Upstreams, ups)
 		}
 
-		if len(requireEds) > 0 {
+		// TODO: FIXME: verify if this could happen when the service is dangling without pods
+		if len(requireFurtherEds) > 0 {
 			p.logger.Infow("empty endpoint, new EDS discovery request",
-				zap.Any("eds_required_clusters", requireEds),
+				zap.Any("eds_required_clusters", requireFurtherEds),
 			)
-			p.sendEds(requireEds)
+			p.sendEds(requireFurtherEds)
 		}
 	case types.ListenerUrl:
 		var (
