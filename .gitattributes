@@ -1,4 +1,8 @@
 # Istio Chart
 # https://github.com/istio/istio/tree/1.13.1/manifests/charts
-e2e/charts/* linguist-generated=true
+e2e/charts/** linguist-generated=true
 e2e/charts/istio-discovery/files/injection-template.yaml linguist-generated=false
+
+# Bookinfo
+# https://github.com/istio/istio/tree/1.13.1/samples/bookinfo/platform/kube
+e2e/bookinfo/* linguist-generated=true
