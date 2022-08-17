@@ -14,6 +14,9 @@
 
 BINDIR ?= ./bin
 ENABLE_PROXY ?= false
+REGISTRY ?="localhost:5000"
+export AMESH_STANDALONE_IMAGE ?= amesh-standalone
+export AMESH_STANDALONE_IMAGE_TAG ?= dev
 export AMESH_SIDECAR_IMAGE ?= amesh-sidecar
 export AMESH_SIDECAR_IMAGE_TAG ?= dev
 export AMESH_IPTABLES_IMAGE ?= amesh-iptables
@@ -25,9 +28,9 @@ export AMESH_SO_IMAGE_TAG ?= dev
 create-bin-dir:
 	@mkdir -p $(BINDIR)
 
-.PHONY: build-amesh-sidecar
-build-amesh-sidecar: create-bin-dir
-	CGO_ENABLED=0 go build -o $(BINDIR)/amesh-sidecar -tags sidecar ./cmd/sidecar
+.PHONY: build-amesh-standalone
+build-amesh-standalone: create-bin-dir
+	CGO_ENABLED=0 go build -o $(BINDIR)/amesh-standalone -tags standalone ./cmd/standalone
 
 .PHONY: build-amesh-so
 build-amesh-so: create-bin-dir
@@ -41,12 +44,12 @@ else
 	@docker build -f Dockerfiles/iptables.Dockerfile -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
 endif
 
-.PHONY: build-amesh-sidecar-image
-build-amesh-sidecar-image:
+.PHONY: build-amesh-standalone-image
+build-amesh-standalone-image:
 ifeq ($(ENABLE_PROXY), true)
-	@docker build -f Dockerfiles/sidecar.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) .
+	@docker build -f Dockerfiles/standalone.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_STANDALONE_IMAGE):$(AMESH_STANDALONE_IMAGE_TAG) .
 else
-	@docker build -f Dockerfiles/sidecar.Dockerfile -t $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) .
+	@docker build -f Dockerfiles/standalone.Dockerfile -t $(AMESH_STANDALONE_IMAGE):$(AMESH_STANDALONE_IMAGE_TAG) .
 endif
 
 .PHONY: build-amesh-so-image
@@ -64,6 +67,48 @@ build-apisix-image:
 		-t amesh-apisix:dev \
 		--build-arg ENABLE_PROXY=true \
 		--build-arg LUAROCKS_SERVER=https://luarocks.cn .
+
+.PHONY: build-amesh-sidecar-image
+build-amesh-sidecar-image: build-amesh-so-image
+	docker pull api7/amesh-apisix:v0.0.2
+	docker tag api7/amesh-apisix:v0.0.2 amesh-apisix:dev
+	docker build \
+		-f Dockerfiles/amesh-sidecar.Dockerfile \
+		-t $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) .
+
+.PHONY: prepare-images
+prepare-images: build-amesh-iptables-image build-amesh-sidecar-image
+	docker tag $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) $(REGISTRY)/$(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG)
+	docker tag $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) $(REGISTRY)/$(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG)
+
+	docker pull istio/pilot:1.13.1
+	docker tag istio/pilot:1.13.1 $(REGISTRY)/istio/pilot:1.13.1
+
+	docker pull nginx:1.19.3
+	docker tag nginx:1.19.3 $(REGISTRY)/nginx:1.19.3
+
+	docker pull kennethreitz/httpbin
+	docker tag kennethreitz/httpbin $(REGISTRY)/kennethreitz/httpbin
+
+.PHONY: push-images
+push-images:
+	docker push $(REGISTRY)/$(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG)
+	docker push $(REGISTRY)/$(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG)
+
+	docker push $(REGISTRY)/istio/pilot:1.13.1
+	docker push $(REGISTRY)/nginx:1.19.3
+	docker push $(REGISTRY)/kennethreitz/httpbin
+
+.PHONY: kind-up
+kind-up:
+	./scripts/kind-with-registry.sh
+
+.PHONY: e2e-test
+e2e-test:
+	AMESH_E2E_HOME=$(shell pwd)/e2e \
+		cd e2e && \
+		go env -w GOFLAGS="-mod=mod" && \
+		ginkgo -cover -coverprofile=coverage.txt -r --randomizeSuites --randomizeAllSpecs --trace -p --nodes=$(E2E_CONCURRENCY)
 
 .PHONY verify-license:
 verify-license:
