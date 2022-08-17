@@ -96,8 +96,8 @@ push-images:
 	docker push $(REGISTRY)/$(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG)
 
 	docker push $(REGISTRY)/istio/pilot:1.13.1
-	docker push nginx:1.19.3 $(REGISTRY)/nginx:1.19.3
-	docker push kennethreitz/httpbin $(REGISTRY)/kennethreitz/httpbin
+	docker push $(REGISTRY)/nginx:1.19.3
+	docker push $(REGISTRY)/kennethreitz/httpbin
 
 .PHONY: kind-up
 kind-up:
