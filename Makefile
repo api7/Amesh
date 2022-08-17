@@ -70,8 +70,8 @@ build-apisix-image:
 
 .PHONY: build-amesh-sidecar-image
 build-amesh-sidecar-image: build-amesh-so-image
-	docker pull ghcr.io/api7/amesh/amesh-apisix:v0.0.2
-	docker tag ghcr.io/api7/amesh/amesh-apisix:v0.0.2 amesh-apisix:dev
+	docker pull api7/amesh-apisix:v0.0.2
+	docker tag api7/amesh-apisix:v0.0.2 amesh-apisix:dev
 	docker build \
 		-f Dockerfiles/amesh-sidecar.Dockerfile \
 		-t $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) .
