@@ -5,7 +5,7 @@
 获取已打包好的镜像：
 
 ```bash
-docker pull ghcr.io/api7/amesh/amesh-iptables:v0.0.2
+docker pull api7/amesh-iptables:v0.0.2
 docker pull api7/amesh-apisix:v0.0.2
 ```
 
