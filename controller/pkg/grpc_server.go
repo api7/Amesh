@@ -62,7 +62,7 @@ func NewGRPCController(GRPCServerAddr string, pluginConfigCache types.PodPluginC
 	c.Log.Info("starting grpc server", "addr", GRPCServerAddr)
 	c.grpcListener = grpcListener
 
-	// TODO expose configurations for the server keepalive parameters.
+	// TODO FIXME expose configurations for the server keepalive parameters.
 	params := keepalive.ServerParameters{
 		MaxConnectionIdle: 15 * time.Minute,
 	}
@@ -73,33 +73,27 @@ func NewGRPCController(GRPCServerAddr string, pluginConfigCache types.PodPluginC
 	return c, nil
 }
 
-func (c *GRPCController) Run(eventChan <-chan *types.UpdatePodPluginConfigEvent, stopCh <-chan struct{}) {
+func (c *GRPCController) NotifyPodChange(updateEvent *types.UpdatePodPluginConfigEvent) {
+	for podName := range updateEvent.Pods {
+		// TODO: FIXME too many lock/unlock
+		c.Log.Info("Pod change event", "pod", updateEvent.Namespace+"/"+podName)
+		instance := c.instanceManager.get(updateEvent.Namespace + "/" + podName)
+		if instance != nil {
+			c.Log.Info("Pod changed, plugin changed", "pod", updateEvent.Namespace+"/"+podName)
+			go func() {
+				instance.UpdateNotifyChan <- struct{}{} // updateEvent.Plugins
+			}()
+		}
+	}
+}
+
+func (c *GRPCController) Run(stopCh <-chan struct{}) {
 	c.stopCh = stopCh
 
 	go func() {
 		err := c.grpcSrv.Serve(c.grpcListener)
 		if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 			c.Log.Error(err, "grpc server serve loop aborted")
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case updateEvent := <-eventChan:
-				for podName := range updateEvent.Pods {
-					// TODO: too many lock/unlock
-					instance := c.instanceManager.get(updateEvent.Namespace + "/" + podName)
-					if instance != nil {
-						go func() {
-							instance.UpdateNotifyChan <- struct{}{} // updateEvent.Plugins
-						}()
-					}
-				}
-			case <-stopCh:
-				c.Log.Info("stop signal received, update loop stopping")
-				return
-			}
 		}
 	}()
 
@@ -120,14 +114,14 @@ func (c *GRPCController) sendPodPluginConfig(podKey string, srv protov1.AmeshSer
 		return status.Errorf(codes.Aborted, err.Error())
 	}
 
-	var pluginConfigs []*protov1.PluginConfig
+	var pluginConfigs []*protov1.AmeshPluginConfig
 	for _, config := range configs {
-		pluginConfig := &protov1.PluginConfig{
-			Plugins: []*protov1.Plugin{},
+		pluginConfig := &protov1.AmeshPluginConfig{
+			Plugins: []*protov1.AmeshPlugin{},
 			Version: config.Version,
 		}
 		for _, plugin := range config.Plugins {
-			pluginConfig.Plugins = append(pluginConfig.Plugins, &protov1.Plugin{
+			pluginConfig.Plugins = append(pluginConfig.Plugins, &protov1.AmeshPlugin{
 				Type:   string(plugin.Type),
 				Name:   plugin.Name,
 				Config: plugin.Config,

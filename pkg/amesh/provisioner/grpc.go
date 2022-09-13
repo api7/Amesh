@@ -100,7 +100,7 @@ func NewXDSProvisioner(cfg *Config) (types.Provisioner, error) {
 	}
 	src := strings.TrimPrefix(cfg.XDSConfigSource, "grpc://")
 
-	// TODO make domain suffix configurable
+	// TODO FIXME make domain suffix configurable
 	dnsDomain := cfg.Namespace + ".svc.cluster.local"
 	node := &corev3.Node{
 		Id:            xds.GenNodeId(cfg.RunId, cfg.IpAddress, dnsDomain),

@@ -3,4 +3,7 @@ kind: AmeshPluginConfig
 metadata:
   name: ameshpluginconfig-sample
 spec:
-  # TODO(user): Add fields here
+  plugins:
+    - name: echo
+      type: pre-req
+      config: '{}'

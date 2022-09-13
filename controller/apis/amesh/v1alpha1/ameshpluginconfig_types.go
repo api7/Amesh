@@ -60,7 +60,7 @@ type AmeshPluginConfigStatus struct {
 //+kubebuilder:subresource:status
 //+genclient
 //+k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-//+kubebuilder:resource:shortName=apc
+//+kubebuilder:resource:shortName=ampc
 
 // AmeshPluginConfig is the Schema for the ameshpluginconfigs API
 type AmeshPluginConfig struct {

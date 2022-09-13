@@ -48,15 +48,18 @@ type AmeshPluginConfigReconciler struct {
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 
-	updateEventChan chan *types.UpdatePodPluginConfigEvent
-
 	podInformer      v1informer.PodInformer
 	selectorCache    *utils.SelectorCache
 	pluginsCacheLock sync.RWMutex
-	pluginsCache     map[string]*types.PodPluginConfig // TODO: Potential High Memory Usage
+
+	// PluginConfig key -> config
+	pluginsCache map[string]*types.PodPluginConfig // TODO: Potential High Memory Usage
+
+	subsLock sync.RWMutex
+	subs     []types.PodChangeReceiver
 }
 
-func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme, updateEventChan chan *types.UpdatePodPluginConfigEvent,
+func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme,
 	podInformer v1informer.PodInformer,
 	ameshPluginConfigInformer ameshv1alpha1informer.AmeshPluginConfigInformer) *AmeshPluginConfigReconciler {
 
@@ -65,16 +68,17 @@ func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme, u
 		Log:    ctrl.Log.WithName("controllers").WithName("AmeshPluginConfig"),
 		Scheme: scheme,
 
-		updateEventChan: updateEventChan,
-		podInformer:     podInformer,
-		selectorCache:   utils.NewSelectorCache(ameshPluginConfigInformer.Lister()),
-		pluginsCache:    map[string]*types.PodPluginConfig{},
+		podInformer:   podInformer,
+		selectorCache: utils.NewSelectorCache(ameshPluginConfigInformer.Lister()),
+		pluginsCache:  map[string]*types.PodPluginConfig{},
 	}
 
+	// TODO: FIXME: delay after AmeshPluginController ready
 	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			pod, ok := obj.(*v1.Pod)
 			if ok {
+				c.Log.Info("Pod added, notify", "pod", pod.Name)
 				c.SendPluginsConfigs(pod.Namespace, sets.NewString(pod.Name), nil)
 			}
 		},
@@ -83,6 +87,8 @@ func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme, u
 			pod, ok2 := newObj.(*v1.Pod)
 			if ok1 && ok2 {
 				if pod.ResourceVersion > old.ResourceVersion && !utils.LabelsEqual(old.Labels, pod.Labels) {
+					c.Log.Info("Pod label changed, notify", "pod", pod.Name)
+					// todo shall we check if it really changes?
 					c.SendPluginsConfigs(pod.Namespace, sets.NewString(pod.Name), nil)
 				}
 			}
@@ -104,6 +110,7 @@ func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme, u
 func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
+	r.Log.Info("reconciling amesh plugin config", "namespace", req.Namespace, "name", req.Name)
 	r.Log.V(4).Info("reconciling amesh plugin config", "namespace", req.Namespace, "name", req.Name)
 
 	instance := &ameshv1alpha1.AmeshPluginConfig{}
@@ -205,13 +212,26 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return ctrl.Result{}, nil
 }
 
+func (r *AmeshPluginConfigReconciler) AddPodChangeListener(receiver types.PodChangeReceiver) {
+	r.subsLock.Lock()
+	r.subs = append(r.subs, receiver)
+	r.subsLock.Unlock()
+}
+
 // SendPluginsConfigs triggers a re-sync process of the pods.
 // Currently, we don't count the plugins passed, actual configs are retrieved from GetPodPluginConfigs
 func (r *AmeshPluginConfigReconciler) SendPluginsConfigs(ns string, names sets.String, plugins []ameshv1alpha1.AmeshPluginConfigPlugin) {
-	r.updateEventChan <- &types.UpdatePodPluginConfigEvent{
-		Namespace: ns,
-		Pods:      names,
-		//Plugins:   plugins,
+	r.Log.Info("send plugins config", "ns", ns, "names", names)
+
+	r.subsLock.RLock()
+	defer r.subsLock.RUnlock()
+
+	for _, sub := range r.subs {
+		sub.NotifyPodChange(&types.UpdatePodPluginConfigEvent{
+			Namespace: ns,
+			Pods:      names,
+			//Plugins:   plugins,
+		})
 	}
 }
 

@@ -13,7 +13,7 @@ spec:
     listKind: AmeshPluginConfigList
     plural: ameshpluginconfigs
     shortNames:
-    - apc
+    - ampc
     singular: ameshpluginconfig
   scope: Namespaced
   versions:

@@ -33,29 +33,30 @@ var (
 	_ = anypb.Any{}
 )
 
-// Validate checks the field values on Plugin with the rules defined in the
-// proto definition for this message. If any rules are violated, the first
+// Validate checks the field values on AmeshPlugin with the rules defined in
+// the proto definition for this message. If any rules are violated, the first
 // error encountered is returned, or nil if there are no violations.
-func (m *Plugin) Validate() error {
+func (m *AmeshPlugin) Validate() error {
 	return m.validate(false)
 }
 
-// ValidateAll checks the field values on Plugin with the rules defined in the
-// proto definition for this message. If any rules are violated, the result is
-// a list of violation errors wrapped in PluginMultiError, or nil if none found.
-func (m *Plugin) ValidateAll() error {
+// ValidateAll checks the field values on AmeshPlugin with the rules defined in
+// the proto definition for this message. If any rules are violated, the
+// result is a list of violation errors wrapped in AmeshPluginMultiError, or
+// nil if none found.
+func (m *AmeshPlugin) ValidateAll() error {
 	return m.validate(true)
 }
 
-func (m *Plugin) validate(all bool) error {
+func (m *AmeshPlugin) validate(all bool) error {
 	if m == nil {
 		return nil
 	}
 
 	var errors []error
 
-	if _, ok := _Plugin_Type_InLookup[m.GetType()]; !ok {
-		err := PluginValidationError{
+	if _, ok := _AmeshPlugin_Type_InLookup[m.GetType()]; !ok {
+		err := AmeshPluginValidationError{
 			field:  "Type",
 			reason: "value must be in list [pre-req post-req]",
 		}
@@ -66,7 +67,7 @@ func (m *Plugin) validate(all bool) error {
 	}
 
 	if utf8.RuneCountInString(m.GetName()) < 1 {
-		err := PluginValidationError{
+		err := AmeshPluginValidationError{
 			field:  "Name",
 			reason: "value length must be at least 1 runes",
 		}
@@ -77,7 +78,7 @@ func (m *Plugin) validate(all bool) error {
 	}
 
 	if utf8.RuneCountInString(m.GetConfig()) < 2 {
-		err := PluginValidationError{
+		err := AmeshPluginValidationError{
 			field:  "Config",
 			reason: "value length must be at least 2 runes",
 		}
@@ -88,17 +89,17 @@ func (m *Plugin) validate(all bool) error {
 	}
 
 	if len(errors) > 0 {
-		return PluginMultiError(errors)
+		return AmeshPluginMultiError(errors)
 	}
 	return nil
 }
 
-// PluginMultiError is an error wrapping multiple validation errors returned by
-// Plugin.ValidateAll() if the designated constraints aren't met.
-type PluginMultiError []error
+// AmeshPluginMultiError is an error wrapping multiple validation errors
+// returned by AmeshPlugin.ValidateAll() if the designated constraints aren't met.
+type AmeshPluginMultiError []error
 
 // Error returns a concatenation of all the error messages it wraps.
-func (m PluginMultiError) Error() string {
+func (m AmeshPluginMultiError) Error() string {
 	var msgs []string
 	for _, err := range m {
 		msgs = append(msgs, err.Error())
@@ -107,11 +108,11 @@ func (m PluginMultiError) Error() string {
 }
 
 // AllErrors returns a list of validation violation errors.
-func (m PluginMultiError) AllErrors() []error { return m }
+func (m AmeshPluginMultiError) AllErrors() []error { return m }
 
-// PluginValidationError is the validation error returned by Plugin.Validate if
-// the designated constraints aren't met.
-type PluginValidationError struct {
+// AmeshPluginValidationError is the validation error returned by
+// AmeshPlugin.Validate if the designated constraints aren't met.
+type AmeshPluginValidationError struct {
 	field  string
 	reason string
 	cause  error
@@ -119,22 +120,22 @@ type PluginValidationError struct {
 }
 
 // Field function returns field value.
-func (e PluginValidationError) Field() string { return e.field }
+func (e AmeshPluginValidationError) Field() string { return e.field }
 
 // Reason function returns reason value.
-func (e PluginValidationError) Reason() string { return e.reason }
+func (e AmeshPluginValidationError) Reason() string { return e.reason }
 
 // Cause function returns cause value.
-func (e PluginValidationError) Cause() error { return e.cause }
+func (e AmeshPluginValidationError) Cause() error { return e.cause }
 
 // Key function returns key value.
-func (e PluginValidationError) Key() bool { return e.key }
+func (e AmeshPluginValidationError) Key() bool { return e.key }
 
 // ErrorName returns error name.
-func (e PluginValidationError) ErrorName() string { return "PluginValidationError" }
+func (e AmeshPluginValidationError) ErrorName() string { return "AmeshPluginValidationError" }
 
 // Error satisfies the builtin error interface
-func (e PluginValidationError) Error() string {
+func (e AmeshPluginValidationError) Error() string {
 	cause := ""
 	if e.cause != nil {
 		cause = fmt.Sprintf(" | caused by: %v", e.cause)
@@ -146,14 +147,14 @@ func (e PluginValidationError) Error() string {
 	}
 
 	return fmt.Sprintf(
-		"invalid %sPlugin.%s: %s%s",
+		"invalid %sAmeshPlugin.%s: %s%s",
 		key,
 		e.field,
 		e.reason,
 		cause)
 }
 
-var _ error = PluginValidationError{}
+var _ error = AmeshPluginValidationError{}
 
 var _ interface {
 	Field() string
@@ -161,29 +162,29 @@ var _ interface {
 	Key() bool
 	Cause() error
 	ErrorName() string
-} = PluginValidationError{}
+} = AmeshPluginValidationError{}
 
-var _Plugin_Type_InLookup = map[string]struct{}{
+var _AmeshPlugin_Type_InLookup = map[string]struct{}{
 	"pre-req":  {},
 	"post-req": {},
 }
 
-// Validate checks the field values on PluginConfig with the rules defined in
-// the proto definition for this message. If any rules are violated, the first
-// error encountered is returned, or nil if there are no violations.
-func (m *PluginConfig) Validate() error {
+// Validate checks the field values on AmeshPluginConfig with the rules defined
+// in the proto definition for this message. If any rules are violated, the
+// first error encountered is returned, or nil if there are no violations.
+func (m *AmeshPluginConfig) Validate() error {
 	return m.validate(false)
 }
 
-// ValidateAll checks the field values on PluginConfig with the rules defined
-// in the proto definition for this message. If any rules are violated, the
-// result is a list of violation errors wrapped in PluginConfigMultiError, or
-// nil if none found.
-func (m *PluginConfig) ValidateAll() error {
+// ValidateAll checks the field values on AmeshPluginConfig with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, the result is a list of violation errors wrapped in
+// AmeshPluginConfigMultiError, or nil if none found.
+func (m *AmeshPluginConfig) ValidateAll() error {
 	return m.validate(true)
 }
 
-func (m *PluginConfig) validate(all bool) error {
+func (m *AmeshPluginConfig) validate(all bool) error {
 	if m == nil {
 		return nil
 	}
@@ -197,7 +198,7 @@ func (m *PluginConfig) validate(all bool) error {
 			switch v := interface{}(item).(type) {
 			case interface{ ValidateAll() error }:
 				if err := v.ValidateAll(); err != nil {
-					errors = append(errors, PluginConfigValidationError{
+					errors = append(errors, AmeshPluginConfigValidationError{
 						field:  fmt.Sprintf("Plugins[%v]", idx),
 						reason: "embedded message failed validation",
 						cause:  err,
@@ -205,7 +206,7 @@ func (m *PluginConfig) validate(all bool) error {
 				}
 			case interface{ Validate() error }:
 				if err := v.Validate(); err != nil {
-					errors = append(errors, PluginConfigValidationError{
+					errors = append(errors, AmeshPluginConfigValidationError{
 						field:  fmt.Sprintf("Plugins[%v]", idx),
 						reason: "embedded message failed validation",
 						cause:  err,
@@ -214,7 +215,7 @@ func (m *PluginConfig) validate(all bool) error {
 			}
 		} else if v, ok := interface{}(item).(interface{ Validate() error }); ok {
 			if err := v.Validate(); err != nil {
-				return PluginConfigValidationError{
+				return AmeshPluginConfigValidationError{
 					field:  fmt.Sprintf("Plugins[%v]", idx),
 					reason: "embedded message failed validation",
 					cause:  err,
@@ -225,7 +226,7 @@ func (m *PluginConfig) validate(all bool) error {
 	}
 
 	if utf8.RuneCountInString(m.GetVersion()) < 1 {
-		err := PluginConfigValidationError{
+		err := AmeshPluginConfigValidationError{
 			field:  "Version",
 			reason: "value length must be at least 1 runes",
 		}
@@ -236,17 +237,18 @@ func (m *PluginConfig) validate(all bool) error {
 	}
 
 	if len(errors) > 0 {
-		return PluginConfigMultiError(errors)
+		return AmeshPluginConfigMultiError(errors)
 	}
 	return nil
 }
 
-// PluginConfigMultiError is an error wrapping multiple validation errors
-// returned by PluginConfig.ValidateAll() if the designated constraints aren't met.
-type PluginConfigMultiError []error
+// AmeshPluginConfigMultiError is an error wrapping multiple validation errors
+// returned by AmeshPluginConfig.ValidateAll() if the designated constraints
+// aren't met.
+type AmeshPluginConfigMultiError []error
 
 // Error returns a concatenation of all the error messages it wraps.
-func (m PluginConfigMultiError) Error() string {
+func (m AmeshPluginConfigMultiError) Error() string {
 	var msgs []string
 	for _, err := range m {
 		msgs = append(msgs, err.Error())
@@ -255,11 +257,11 @@ func (m PluginConfigMultiError) Error() string {
 }
 
 // AllErrors returns a list of validation violation errors.
-func (m PluginConfigMultiError) AllErrors() []error { return m }
+func (m AmeshPluginConfigMultiError) AllErrors() []error { return m }
 
-// PluginConfigValidationError is the validation error returned by
-// PluginConfig.Validate if the designated constraints aren't met.
-type PluginConfigValidationError struct {
+// AmeshPluginConfigValidationError is the validation error returned by
+// AmeshPluginConfig.Validate if the designated constraints aren't met.
+type AmeshPluginConfigValidationError struct {
 	field  string
 	reason string
 	cause  error
@@ -267,22 +269,24 @@ type PluginConfigValidationError struct {
 }
 
 // Field function returns field value.
-func (e PluginConfigValidationError) Field() string { return e.field }
+func (e AmeshPluginConfigValidationError) Field() string { return e.field }
 
 // Reason function returns reason value.
-func (e PluginConfigValidationError) Reason() string { return e.reason }
+func (e AmeshPluginConfigValidationError) Reason() string { return e.reason }
 
 // Cause function returns cause value.
-func (e PluginConfigValidationError) Cause() error { return e.cause }
+func (e AmeshPluginConfigValidationError) Cause() error { return e.cause }
 
 // Key function returns key value.
-func (e PluginConfigValidationError) Key() bool { return e.key }
+func (e AmeshPluginConfigValidationError) Key() bool { return e.key }
 
 // ErrorName returns error name.
-func (e PluginConfigValidationError) ErrorName() string { return "PluginConfigValidationError" }
+func (e AmeshPluginConfigValidationError) ErrorName() string {
+	return "AmeshPluginConfigValidationError"
+}
 
 // Error satisfies the builtin error interface
-func (e PluginConfigValidationError) Error() string {
+func (e AmeshPluginConfigValidationError) Error() string {
 	cause := ""
 	if e.cause != nil {
 		cause = fmt.Sprintf(" | caused by: %v", e.cause)
@@ -294,14 +298,14 @@ func (e PluginConfigValidationError) Error() string {
 	}
 
 	return fmt.Sprintf(
-		"invalid %sPluginConfig.%s: %s%s",
+		"invalid %sAmeshPluginConfig.%s: %s%s",
 		key,
 		e.field,
 		e.reason,
 		cause)
 }
 
-var _ error = PluginConfigValidationError{}
+var _ error = AmeshPluginConfigValidationError{}
 
 var _ interface {
 	Field() string
@@ -309,4 +313,4 @@ var _ interface {
 	Key() bool
 	Cause() error
 	ErrorName() string
-} = PluginConfigValidationError{}
+} = AmeshPluginConfigValidationError{}

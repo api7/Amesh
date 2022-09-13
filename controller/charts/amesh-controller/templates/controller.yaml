@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: amesh-controller
+  labels:
+    app: amesh-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: amesh-controller
+  template:
+    metadata:
+      name: amesh-controller
+      labels:
+        app: amesh-controller
+    spec:
+      serviceAccountName: amesh-controller-service-account
+      containers:
+        - name: mutator
+          image: "{{ .Values.controller.image }}"
+          imagePullPolicy: {{ .Values.controller.pullPolicy }}
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 250m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: amesh-controller
+  labels:
+    app: amesh-controller
+spec:
+  publishNotReadyAddresses: true
+  ports:
+    - port: 18080
+      targetPort: 18080
+      name: metrics
+    - port: 18081
+      targetPort: 18081
+      name: health
+    - port: 15810
+      targetPort: 15810
+      name: grpc
+  selector:
+    app: amesh-controller

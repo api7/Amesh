@@ -34,3 +34,11 @@ type UpdatePodPluginConfigEvent struct {
 	Pods      sets.String
 	//Plugins   []ameshv1alpha1.AmeshPluginConfigPlugin
 }
+
+type PodChangeNotifier interface {
+	AddPodChangeListener(receiver PodChangeReceiver)
+}
+
+type PodChangeReceiver interface {
+	NotifyPodChange(*UpdatePodPluginConfigEvent)
+}

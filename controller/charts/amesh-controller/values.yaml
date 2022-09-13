@@ -1,0 +1,6 @@
+images:
+
+controller:
+  image: "10.0.0.20:5000/amesh-controller:latest"
+  pullPolicy: Always #IfNotPresent
+#  log_level: debug
