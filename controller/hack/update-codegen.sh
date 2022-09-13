@@ -30,15 +30,15 @@ PKG_NAME="github.com/api7/amesh"
 rm -rf "$GENERATED_ROOT"
 
 bash "${SCRIPT_ROOT}"/generate-groups.sh "deepcopy,client,informer,lister" \
-  ${PKG_NAME}/api/client ${PKG_NAME}/api \
-  apis:v1alpha1 ${PKG_NAME} \
+  ${PKG_NAME}/apis/client ${PKG_NAME}/apis \
+  amesh:v1alpha1 ${PKG_NAME} \
   --output-base "$GENERATED_ROOT" \
   --go-header-file "${SCRIPT_ROOT}"/boilerplate.go.txt \
   "$@"
 
 bash "${SCRIPT_ROOT}"/generate-groups.sh "register" \
-  ${PKG_NAME}/api ${PKG_NAME}/api \
-  apis:v1alpha1 ${PKG_NAME} \
+  ${PKG_NAME}/apis ${PKG_NAME}/apis \
+  amesh:v1alpha1 ${PKG_NAME} \
   --output-base "$GENERATED_ROOT" \
   --go-header-file "${SCRIPT_ROOT}"/boilerplate.go.txt \
   "$@"

@@ -18,22 +18,25 @@ package main
 
 import (
 	"flag"
+	"github.com/api7/amesh/controllers/amesh"
 	"os"
-
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	kubeinformers "k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	ameshv1alpha1 "github.com/api7/amesh/api/apis/v1alpha1"
-	"github.com/api7/amesh/controllers"
-	//+kubebuilder:scaffold:imports
+	ameshv1alpha1 "github.com/api7/amesh/apis/amesh/v1alpha1"
+	clientset "github.com/api7/amesh/apis/client/clientset/versioned"
+	ameshv1alpha1informers "github.com/api7/amesh/apis/client/informers/externalversions"
+	"github.com/api7/amesh/pkg"
 )
 
 var (
@@ -89,9 +92,29 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = controllers.NewAmeshPluginConfigController(
-		mgr.GetClient(), mgr.GetScheme(),
-	).SetupWithManager(mgr); err != nil {
+	cfg, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBECONFIG"))
+	if err != nil {
+		setupLog.Error(err, "failed to build kubeconfig")
+	}
+	kubeClient, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		setupLog.Error(err, "failed to create kubernetes clientset")
+	}
+
+	ameshClient, err := clientset.NewForConfig(cfg)
+	if err != nil {
+		setupLog.Error(err, "failed to create Amesh clientset: %s")
+	}
+	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
+	ameshInformerFactory := ameshv1alpha1informers.NewSharedInformerFactory(ameshClient, time.Second*30)
+
+	// Controllers
+
+	ameshPluginConfigController := amesh.NewAmeshPluginConfigController(mgr.GetClient(), mgr.GetScheme(),
+		kubeInformerFactory.Core().V1().Pods(),
+		ameshInformerFactory.Apisix().V1alpha1().AmeshPluginConfigs(),
+	)
+	if err = ameshPluginConfigController.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AmeshPluginConfig")
 		os.Exit(1)
 	}
@@ -106,8 +129,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Others
+	grpc, err := pkg.NewGRPCController(":15810", ameshPluginConfigController)
+	if err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GRPC")
+		os.Exit(1)
+	}
+
+	// Startup
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	ctx := ctrl.SetupSignalHandler()
+	kubeInformerFactory.Start(ctx.Done())
+	ameshInformerFactory.Start(ctx.Done())
+	grpc.Run(ctx.Done())
+
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

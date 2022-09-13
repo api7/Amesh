@@ -15,28 +15,31 @@
 package utils
 
 import (
-	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/tools/cache"
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/tools/cache"
 
-	ameshv1alpha1lister "github.com/api7/amesh/api/client/listers/apis/v1alpha1"
+	ameshv1alpha1lister "github.com/api7/amesh/apis/client/listers/amesh/v1alpha1"
 )
 
 // SelectorCache is a cache of selectors to avoid high CPU consumption caused by frequent calls
 type SelectorCache struct {
+	lister ameshv1alpha1lister.AmeshPluginConfigLister
+
 	lock sync.RWMutex
 	// key -> selector
 	cache map[string]labels.Selector
 }
 
 // NewSelectorCache init SelectorCache for controller.
-func NewSelectorCache() *SelectorCache {
+func NewSelectorCache(lister ameshv1alpha1lister.AmeshPluginConfigLister) *SelectorCache {
 	return &SelectorCache{
-		cache: map[string]labels.Selector{},
+		lister: lister,
+		cache:  map[string]labels.Selector{},
 	}
 }
 
@@ -51,7 +54,7 @@ func (sc *SelectorCache) Get(key string) (labels.Selector, bool) {
 // Update can update or add a selector in SelectorCache while plugin config's selector changed.
 func (sc *SelectorCache) Update(key string, metaSelector *metav1.LabelSelector) (selector labels.Selector, err error) {
 	if metaSelector == nil || (len(metaSelector.MatchLabels)+len(metaSelector.MatchExpressions) == 0) {
-		selector = labels.Everything()
+		return nil, nil
 	} else {
 		selector, err = metav1.LabelSelectorAsSelector(metaSelector)
 		if err != nil {
@@ -73,10 +76,10 @@ func (sc *SelectorCache) Delete(key string) {
 	sc.lock.Unlock()
 }
 
-func (sc *SelectorCache) GetPodMemberships(lister ameshv1alpha1lister.AmeshPluginConfigLister, pod *v1.Pod) (sets.String, error) {
+func (sc *SelectorCache) GetPodPluginConfigs(pod *v1.Pod) (sets.String, error) {
 	matchedConfigKeys := sets.String{}
 
-	configs, err := lister.AmeshPluginConfigs(pod.Namespace).List(labels.Everything())
+	configs, err := sc.lister.AmeshPluginConfigs(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return matchedConfigKeys, err
 	}

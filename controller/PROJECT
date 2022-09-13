@@ -1,6 +1,7 @@
 domain: apisix.apache.org
 layout:
 - go.kubebuilder.io/v3
+multigroup: true
 projectName: test
 repo: github.com/api7/amesh
 resources:
