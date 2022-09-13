@@ -45,6 +45,10 @@ spec:
                       minLength: 2
                       type: string
                     name:
+                      minLength: 1
+                      type: string
+                    type:
+                      description: AmeshPluginConfigType is the config type
                       enum:
                       - pre-req
                       - post-req
@@ -97,9 +101,6 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-map-type: atomic
-              type:
-                description: AmeshPluginConfigType is the config type
-                type: string
             type: object
           status:
             description: AmeshPluginConfigStatus defines the observed state of AmeshPluginConfig

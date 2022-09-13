@@ -31,6 +31,9 @@ const (
 // AmeshPluginConfigPlugin is the plugin config detail
 type AmeshPluginConfigPlugin struct {
 	//+kubebuilder:validation:Enum=pre-req;post-req
+	Type AmeshPluginConfigType `json:"type,omitempty" yaml:"type,omitempty"`
+	//+kubebuilder:validation:Required
+	//+kubebuilder:validation:MinLength=1
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
 	//+kubebuilder:validation:Required
 	//+kubebuilder:validation:MinLength=2
@@ -39,7 +42,6 @@ type AmeshPluginConfigPlugin struct {
 
 // AmeshPluginConfigSpec defines the desired state of AmeshPluginConfig
 type AmeshPluginConfigSpec struct {
-	Type AmeshPluginConfigType `json:"type,omitempty" yaml:"type,omitempty"`
 	//+required
 	//+kubebuilder:validation:Required
 	//+kubebuilder:validation:MinItems=1
@@ -77,8 +79,4 @@ type AmeshPluginConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AmeshPluginConfig `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&AmeshPluginConfig{}, &AmeshPluginConfigList{})
 }

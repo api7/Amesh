@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -38,6 +39,9 @@ type AmeshPluginConfigReconciler struct {
 	Scheme *runtime.Scheme
 
 	selectorCache *utils.SelectorCache
+
+	pluginsCacheLock sync.RWMutex
+	pluginsCache     map[string][]ameshv1alpha1.AmeshPluginConfigPlugin
 }
 
 func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme) *AmeshPluginConfigReconciler {
@@ -45,6 +49,9 @@ func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme) *
 		Client: cli,
 		Log:    ctrl.Log.WithName("controllers").WithName("AmeshPluginConfig"),
 		Scheme: scheme,
+
+		selectorCache: utils.NewSelectorCache(),
+		pluginsCache:  map[string][]ameshv1alpha1.AmeshPluginConfigPlugin{},
 	}
 }
 
@@ -71,12 +78,19 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			// Return and don't requeue
 			return ctrl.Result{}, nil
 		}
-		// requeue the request.
+		// requeue
 		return ctrl.Result{}, errors.Wrap(err, "get object")
 	}
 	if instance.DeletionTimestamp != nil {
-		return ctrl.Result{}, errors.Wrap(err, "unexpected DeletionTimestamp")
+		r.Log.Error(err, "unexpected DeletionTimestamp")
+		return ctrl.Result{}, nil
 	}
+
+	r.pluginsCacheLock.Lock()
+	r.pluginsCache[req.NamespacedName.String()] = instance.Spec.Plugins
+	r.pluginsCacheLock.Unlock()
+
+	// Send to gRPC client
 
 	return ctrl.Result{}, nil
 }
