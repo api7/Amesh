@@ -1,0 +1,20 @@
+# permissions for end users to view ameshpluginconfigs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ameshpluginconfig-viewer-role
+rules:
+- apiGroups:
+  - apisix.apache.org
+  resources:
+  - ameshpluginconfigs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apisix.apache.org
+  resources:
+  - ameshpluginconfigs/status
+  verbs:
+  - get

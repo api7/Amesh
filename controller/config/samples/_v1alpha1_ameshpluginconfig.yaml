@@ -1,0 +1,6 @@
+apiVersion: apisix.apache.org/v1alpha1
+kind: AmeshPluginConfig
+metadata:
+  name: ameshpluginconfig-sample
+spec:
+  # TODO(user): Add fields here
