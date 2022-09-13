@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	apisixapacheorgv1alpha1 "github.com/api7/amesh/api/v1alpha1"
+	ameshv1alpha1 "github.com/api7/amesh/api/apis/v1alpha1"
 	"github.com/api7/amesh/controllers"
 	//+kubebuilder:scaffold:imports
 )
@@ -44,7 +44,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(apisixapacheorgv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(ameshv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -89,10 +89,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.AmeshPluginConfigReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	if err = controllers.NewAmeshPluginConfigController(
+		mgr.GetClient(), mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AmeshPluginConfig")
 		os.Exit(1)
 	}

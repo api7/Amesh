@@ -130,3 +130,23 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+.PHONY: gen-tools
+gen-tools:
+	go mod download
+	#curl -s -S -L -f -o hack/generate-groups.sh -z hack/generate-groups.sh https://raw.githubusercontent.com/kubernetes/code-generator/master/generate-groups.sh
+	bash -c 'go install k8s.io/code-generator/cmd/{client-gen,lister-gen,informer-gen,deepcopy-gen,register-gen}'
+
+.PHONY: update-codegen
+update-codegen: gen-tools
+	./hack/update-codegen.sh
+
+.PHONY: update-imports
+update-imports:
+	bash -c 'go install github.com/incu6us/goimports-reviser/v2@latest'
+	./hack/update-imports.sh
+
+.PHONY update-license:
+update-license:
+	@docker pull apache/skywalking-eyes
+	docker run -it --rm -v $(PWD):/github/workspace apache/skywalking-eyes header fix

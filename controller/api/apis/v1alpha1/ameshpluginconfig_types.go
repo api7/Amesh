@@ -70,6 +70,7 @@ type AmeshPluginConfig struct {
 }
 
 //+kubebuilder:object:root=true
+//+k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // AmeshPluginConfigList contains a list of AmeshPluginConfig
 type AmeshPluginConfigList struct {

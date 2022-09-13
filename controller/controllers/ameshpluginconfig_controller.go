@@ -19,18 +19,33 @@ package controllers
 import (
 	"context"
 
+	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	apisixapacheorgv1alpha1 "github.com/api7/amesh/api/v1alpha1"
+	ameshv1alpha1 "github.com/api7/amesh/api/apis/v1alpha1"
+	"github.com/api7/amesh/utils"
 )
 
 // AmeshPluginConfigReconciler reconciles a AmeshPluginConfig object
 type AmeshPluginConfigReconciler struct {
 	client.Client
+	Log    logr.Logger
 	Scheme *runtime.Scheme
+
+	selectorCache *utils.SelectorCache
+}
+
+func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme) *AmeshPluginConfigReconciler {
+	return &AmeshPluginConfigReconciler{
+		Client: cli,
+		Log:    ctrl.Log.WithName("controllers").WithName("AmeshPluginConfig"),
+		Scheme: scheme,
+	}
 }
 
 //+kubebuilder:rbac:groups=apisix.apache.org,resources=ameshpluginconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -39,17 +54,29 @@ type AmeshPluginConfigReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the AmeshPluginConfig object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
 func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	r.Log.V(4).Info("reconciling amesh plugin config", "namespace", req.Namespace, "name", req.Name)
+
+	// Fetch the AppService instance
+	instance := &ameshv1alpha1.AmeshPluginConfig{}
+	err := r.Client.Get(context.TODO(), req.NamespacedName, instance)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Request object not found, could have been deleted after reconcile request.
+			// Return and don't requeue
+			return ctrl.Result{}, nil
+		}
+		// requeue the request.
+		return ctrl.Result{}, errors.Wrap(err, "get object")
+	}
+	if instance.DeletionTimestamp != nil {
+		return ctrl.Result{}, errors.Wrap(err, "unexpected DeletionTimestamp")
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -57,6 +84,6 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // SetupWithManager sets up the controller with the Manager.
 func (r *AmeshPluginConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&apisixapacheorgv1alpha1.AmeshPluginConfig{}).
+		For(&ameshv1alpha1.AmeshPluginConfig{}).
 		Complete(r)
 }
