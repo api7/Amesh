@@ -8,7 +8,7 @@ The Amesh project is currently under active development and is considered to be 
 
 ## Architecture
 
-
+![arch](./docs/images/arch.png)
 
 ## Quick Start
 
