@@ -24,7 +24,7 @@ message PluginsResponse {
   // exit itself.
   google.rpc.Status error_message = 1;
   // the proxy needed plugins
-  repeated Plugin plugins = 2;
+  repeated PluginConfig plugins = 2;
 }
 
 // Controller service

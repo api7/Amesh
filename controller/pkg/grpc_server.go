@@ -73,13 +73,33 @@ func NewGRPCController(GRPCServerAddr string, pluginConfigCache types.PodPluginC
 	return c, nil
 }
 
-func (c *GRPCController) Run(stopCh <-chan struct{}) {
+func (c *GRPCController) Run(eventChan <-chan *types.UpdatePodPluginConfigEvent, stopCh <-chan struct{}) {
 	c.stopCh = stopCh
 
 	go func() {
 		err := c.grpcSrv.Serve(c.grpcListener)
 		if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 			c.Log.Error(err, "grpc server serve loop aborted")
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case updateEvent := <-eventChan:
+				for podName := range updateEvent.Pods {
+					// TODO: too many lock/unlock
+					instance := c.instanceManager.get(updateEvent.Namespace + "/" + podName)
+					if instance != nil {
+						go func() {
+							instance.UpdateNotifyChan <- struct{}{} // updateEvent.Plugins
+						}()
+					}
+				}
+			case <-stopCh:
+				c.Log.Info("stop signal received, update loop stopping")
+				return
+			}
 		}
 	}()
 
@@ -100,18 +120,26 @@ func (c *GRPCController) sendPodPluginConfig(podKey string, srv protov1.AmeshSer
 		return status.Errorf(codes.Aborted, err.Error())
 	}
 
-	var plugins []*protov1.Plugin
+	var pluginConfigs []*protov1.PluginConfig
 	for _, config := range configs {
-		plugins = append(plugins, &protov1.Plugin{
-			Type:   string(config.Type),
-			Name:   config.Name,
-			Config: config.Config,
-		})
+		pluginConfig := &protov1.PluginConfig{
+			Plugins: []*protov1.Plugin{},
+			Version: config.Version,
+		}
+		for _, plugin := range config.Plugins {
+			pluginConfig.Plugins = append(pluginConfig.Plugins, &protov1.Plugin{
+				Type:   string(plugin.Type),
+				Name:   plugin.Name,
+				Config: plugin.Config,
+			})
+		}
+
+		pluginConfigs = append(pluginConfigs, pluginConfig)
 	}
 
 	err = srv.Send(&protov1.PluginsResponse{
 		ErrorMessage: nil,
-		Plugins:      plugins,
+		Plugins:      pluginConfigs,
 	})
 	if err != nil {
 		c.Log.V(4).Error(err, "failed to send PluginsResponse", "pod", podKey)
@@ -126,6 +154,9 @@ func (c *GRPCController) StreamPlugins(req *protov1.PluginsRequest, srv protov1.
 
 	instance := &ProxyInstance{
 		UpdateNotifyChan: make(chan struct{}),
+		//UpdateFunc: func() error {
+		//	return c.sendPodPluginConfig(podKey, srv)
+		//},
 	}
 	c.instanceManager.add(podKey, instance)
 	defer c.instanceManager.delete(podKey)

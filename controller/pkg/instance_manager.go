@@ -18,6 +18,7 @@ import "sync"
 
 type ProxyInstance struct {
 	UpdateNotifyChan chan struct{}
+	//UpdateFunc func() error
 }
 
 type InstanceManager struct {

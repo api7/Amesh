@@ -21,9 +21,11 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	"github.com/pkg/errors"
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	v1informer "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -46,24 +48,47 @@ type AmeshPluginConfigReconciler struct {
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 
+	updateEventChan chan *types.UpdatePodPluginConfigEvent
+
 	podInformer      v1informer.PodInformer
 	selectorCache    *utils.SelectorCache
 	pluginsCacheLock sync.RWMutex
-	pluginsCache     map[string][]ameshv1alpha1.AmeshPluginConfigPlugin // TODO: Potential High Memory Usage
+	pluginsCache     map[string]*types.PodPluginConfig // TODO: Potential High Memory Usage
 }
 
-func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme,
+func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme, updateEventChan chan *types.UpdatePodPluginConfigEvent,
 	podInformer v1informer.PodInformer,
 	ameshPluginConfigInformer ameshv1alpha1informer.AmeshPluginConfigInformer) *AmeshPluginConfigReconciler {
+
 	c := &AmeshPluginConfigReconciler{
 		Client: cli,
 		Log:    ctrl.Log.WithName("controllers").WithName("AmeshPluginConfig"),
 		Scheme: scheme,
 
-		podInformer:   podInformer,
-		selectorCache: utils.NewSelectorCache(ameshPluginConfigInformer.Lister()),
-		pluginsCache:  map[string][]ameshv1alpha1.AmeshPluginConfigPlugin{},
+		updateEventChan: updateEventChan,
+		podInformer:     podInformer,
+		selectorCache:   utils.NewSelectorCache(ameshPluginConfigInformer.Lister()),
+		pluginsCache:    map[string]*types.PodPluginConfig{},
 	}
+
+	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			pod, ok := obj.(*v1.Pod)
+			if ok {
+				c.SendPluginsConfigs(pod.Namespace, sets.NewString(pod.Name), nil)
+			}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			old, ok1 := oldObj.(*v1.Pod)
+			pod, ok2 := newObj.(*v1.Pod)
+			if ok1 && ok2 {
+				if pod.ResourceVersion > old.ResourceVersion && !utils.LabelsEqual(old.Labels, pod.Labels) {
+					c.SendPluginsConfigs(pod.Namespace, sets.NewString(pod.Name), nil)
+				}
+			}
+		},
+	})
+
 	return c
 }
 
@@ -90,7 +115,7 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, nil
 		}
 		// requeue
-		return ctrl.Result{}, errors.Wrap(err, "get object")
+		return ctrl.Result{}, err
 	}
 	if instance.DeletionTimestamp != nil {
 		r.Log.Error(err, "unexpected DeletionTimestamp")
@@ -99,50 +124,95 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	key := req.NamespacedName.String()
-	oldSelector, ok := r.selectorCache.Get(key)
+	r.pluginsCacheLock.RLock()
+	oldConfig, ok2 := r.pluginsCache[key]
+	r.pluginsCacheLock.RUnlock()
+	if oldConfig.Version >= instance.ResourceVersion {
+		return ctrl.Result{}, nil
+	}
+
+	oldSelector, hasOldSelector := r.selectorCache.Get(key)
 	newSelector, err := r.selectorCache.Update(key, instance.Spec.Selector)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
+	newPlugins := instance.Spec.Plugins
+	newConfig := &types.PodPluginConfig{
+		Plugins: newPlugins,
+		Version: instance.ResourceVersion,
+	}
 	r.pluginsCacheLock.Lock()
-	r.pluginsCache[key] = instance.Spec.Plugins
+	r.pluginsCache[key] = newConfig
 	r.pluginsCacheLock.Unlock()
 
-	pluginChanged := true
+	if !hasOldSelector {
+		oldSelector = labels.Everything()
+	}
+	onlyInOld, both, onlyInNew, err := utils.DiffPods(r.podInformer.Lister(), req.Namespace, oldSelector, newSelector)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
-	// TODO: detect if plugins are changed
-	// TODO: detect if selectors are changed
-	// TODO: detect affected pods
-	_ = oldSelector
-	if !ok && newSelector == nil {
-		// TODO: both empty (everything), if plugins changed, then affects all pods
+	pluginChanged := true // Defaults true to ensure no data missed
+	if ok2 {
+		pluginChanged = !utils.PluginsConfigEqual(oldConfig.Plugins, newPlugins)
+	}
+
+	if !hasOldSelector && newSelector == nil {
+		// both empty (everything), if plugins changed, then affects all pods; else do nothing
+		if pluginChanged {
+			// affect all Pods
+			allPods, err := r.podInformer.Lister().Pods(req.Namespace).List(labels.Everything())
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			pods := sets.String{}
+			for _, pod := range allPods {
+				pods.Insert(pod.Name)
+			}
+			r.SendPluginsConfigs(req.Namespace, pods, newPlugins)
+		}
 
 		return ctrl.Result{}, nil
-	} else if !ok {
+	} else if !hasOldSelector {
+		// previous is everything, should remove config for no longer matched
+		r.SendPluginsConfigs(req.Namespace, onlyInOld, nil)
 		if pluginChanged {
-			// TODO: update all because plugin changed
-		} else {
-			// TODO: previous is everything, should remove their config
-			// TODO: plugin doesn't changed, so new-matched pods do nothing
+			// update still matched
+			r.SendPluginsConfigs(req.Namespace, both, newPlugins)
+			r.SendPluginsConfigs(req.Namespace, onlyInNew, newPlugins)
 		}
 	} else if newSelector == nil {
+		// current is everything, should add config for newly matched
+		r.SendPluginsConfigs(req.Namespace, onlyInNew, newPlugins)
 		if pluginChanged {
-			// TODO: update all because plugin changed
-		} else {
-			// TODO: new is everything, should add config for them
-			// TODO: plugin doesn't changed, so previous-matched pods do nothing
+			// update still matched
+			r.SendPluginsConfigs(req.Namespace, onlyInOld, newPlugins)
+			r.SendPluginsConfigs(req.Namespace, both, newPlugins)
 		}
 	} else {
-		// TODO: calculate intersection
-		// TODO: Remove unmatched Pods
+		// Remove no longer matched Pods
+		r.SendPluginsConfigs(req.Namespace, onlyInOld, nil)
+		// Add newly matched Pods
+		r.SendPluginsConfigs(req.Namespace, onlyInNew, newPlugins)
 		if pluginChanged {
-			// TODO: update matched Pods
+			// Update existed Pods
+			r.SendPluginsConfigs(req.Namespace, both, newPlugins)
 		}
 	}
-	// TODO: If Pod labels changed, Re-send
 
 	return ctrl.Result{}, nil
+}
+
+// SendPluginsConfigs triggers a re-sync process of the pods.
+// Currently, we don't count the plugins passed, actual configs are retrieved from GetPodPluginConfigs
+func (r *AmeshPluginConfigReconciler) SendPluginsConfigs(ns string, names sets.String, plugins []ameshv1alpha1.AmeshPluginConfigPlugin) {
+	r.updateEventChan <- &types.UpdatePodPluginConfigEvent{
+		Namespace: ns,
+		Pods:      names,
+		//Plugins:   plugins,
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -152,7 +222,7 @@ func (r *AmeshPluginConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *AmeshPluginConfigReconciler) GetPodPluginConfigs(key string) ([]ameshv1alpha1.AmeshPluginConfigPlugin, error) {
+func (r *AmeshPluginConfigReconciler) GetPodPluginConfigs(key string) ([]*types.PodPluginConfig, error) {
 	ns, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		return nil, err
@@ -166,16 +236,16 @@ func (r *AmeshPluginConfigReconciler) GetPodPluginConfigs(key string) ([]ameshv1
 		return nil, err
 	}
 
-	var plugins []ameshv1alpha1.AmeshPluginConfigPlugin
+	var configs []*types.PodPluginConfig
 	r.pluginsCacheLock.RLock()
 	for _, key := range pluginConfigs.List() {
 		cached, ok := r.pluginsCache[key]
 		if !ok {
 			continue
 		}
-		plugins = append(plugins, cached...)
+		configs = append(configs, cached)
 	}
 	r.pluginsCacheLock.RUnlock()
 
-	return plugins, nil
+	return configs, nil
 }

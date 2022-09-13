@@ -54,7 +54,7 @@ func (sc *SelectorCache) Get(key string) (labels.Selector, bool) {
 // Update can update or add a selector in SelectorCache while plugin config's selector changed.
 func (sc *SelectorCache) Update(key string, metaSelector *metav1.LabelSelector) (selector labels.Selector, err error) {
 	if metaSelector == nil || (len(metaSelector.MatchLabels)+len(metaSelector.MatchExpressions) == 0) {
-		return nil, nil
+		selector = labels.Everything()
 	} else {
 		selector, err = metav1.LabelSelectorAsSelector(metaSelector)
 		if err != nil {

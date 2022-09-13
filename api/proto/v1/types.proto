@@ -17,3 +17,9 @@ message Plugin {
   // The plugin config
   string config = 3 [(validate.rules).string = {min_len: 2}];
 }
+
+message PluginConfig {
+  repeated Plugin plugins = 1;
+  // The resource version. Proxy should apply the newest version only.
+  string version = 2 [(validate.rules).string = {min_len: 1}];
+}

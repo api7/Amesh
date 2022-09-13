@@ -6,3 +6,9 @@ e2e/charts/istio-discovery/files/injection-template.yaml linguist-generated=fals
 # Bookinfo
 # https://github.com/istio/istio/tree/1.13.1/samples/bookinfo/platform/kube
 e2e/bookinfo/* linguist-generated=true
+
+# K8s & gRPC
+**/zz_generated.*.go linguist-generated=true
+**/types.generated.go linguist-generated=true
+**/*.pb.go linguist-generated=true
+**/*.pb.validate.go linguist-generated=true

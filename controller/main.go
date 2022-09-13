@@ -18,7 +18,6 @@ package main
 
 import (
 	"flag"
-	"github.com/api7/amesh/controllers/amesh"
 	"os"
 	"time"
 
@@ -36,6 +35,7 @@ import (
 	ameshv1alpha1 "github.com/api7/amesh/apis/amesh/v1alpha1"
 	clientset "github.com/api7/amesh/apis/client/clientset/versioned"
 	ameshv1alpha1informers "github.com/api7/amesh/apis/client/informers/externalversions"
+	"github.com/api7/amesh/controllers/amesh"
 	"github.com/api7/amesh/pkg"
 )
 

@@ -14,8 +14,23 @@
 
 package types
 
-import ameshv1alpha1 "github.com/api7/amesh/apis/amesh/v1alpha1"
+import (
+	"k8s.io/apimachinery/pkg/util/sets"
+
+	ameshv1alpha1 "github.com/api7/amesh/apis/amesh/v1alpha1"
+)
+
+type PodPluginConfig struct {
+	Plugins []ameshv1alpha1.AmeshPluginConfigPlugin
+	Version string
+}
 
 type PodPluginConfigCache interface {
-	GetPodPluginConfigs(key string) ([]ameshv1alpha1.AmeshPluginConfigPlugin, error)
+	GetPodPluginConfigs(key string) ([]*PodPluginConfig, error)
+}
+
+type UpdatePodPluginConfigEvent struct {
+	Namespace string
+	Pods      sets.String
+	//Plugins   []ameshv1alpha1.AmeshPluginConfigPlugin
 }
