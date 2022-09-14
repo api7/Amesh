@@ -1,0 +1,9 @@
+apiVersion: apisix.apache.org/v1alpha1
+kind: AmeshPluginConfig
+metadata:
+  name: ameshpluginconfig-sample
+spec:
+  plugins:
+    - name: echo
+      type: pre-req
+      config: '{}'

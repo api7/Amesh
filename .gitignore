@@ -6,3 +6,4 @@ bin
 # ide settings
 .idea
 .vscode
+.api.tmp

@@ -1,0 +1,24 @@
+# permissions for end users to edit ameshpluginconfigs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ameshpluginconfig-editor-role
+rules:
+- apiGroups:
+  - apisix.apache.org
+  resources:
+  - ameshpluginconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apisix.apache.org
+  resources:
+  - ameshpluginconfigs/status
+  verbs:
+  - get

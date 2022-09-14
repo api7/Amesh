@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package ai.api7.amesh.proto.v1;
+
+option go_package = "github.com/api7/amesh/api/proto/v1";
+
+import "validate/validate.proto";
+import "google/protobuf/struct.proto";
+
+// Instance contains metadata to describe the proxy instance.
+message Instance {
+  // Key of the proxy Pod.
+  string key = 1 [(validate.rules).string = {min_len: 2, max_len: 253}];
+}

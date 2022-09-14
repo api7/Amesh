@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package ai.api7.amesh.proto.v1;
+
+option go_package = "github.com/api7/amesh/api/proto/v1";
+
+import "validate/validate.proto";
+//import "google/protobuf/any.proto";
+
+
+// Event represent a configuration change.
+message AmeshPlugin {
+  // The plugin type
+  string type = 1 [(validate.rules).string = {in: ["pre-req", "post-req"]}];
+  // The plugin name
+  string name = 2 [(validate.rules).string = {min_len: 1}];
+  // The plugin config
+  string config = 3 [(validate.rules).string = {min_len: 2}];
+}
+
+message AmeshPluginConfig {
+  repeated AmeshPlugin plugins = 1;
+  // The resource version. Proxy should apply the newest version only.
+  string version = 2 [(validate.rules).string = {min_len: 1}];
+}

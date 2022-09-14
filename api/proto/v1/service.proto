@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package ai.api7.amesh.proto.v1;
+
+option go_package = "github.com/api7/amesh/api/proto/v1";
+
+import "proto/v1/types.proto";
+import "proto/v1/instance.proto";
+import "validate/validate.proto";
+import "google/rpc/status.proto";
+
+// PluginsRequest is a message which will be used in the AmeshService.
+// It's sent by the proxy instance and carries the proxy instance identifier
+message PluginsRequest {
+  // The proxy instance identifier.
+  Instance instance = 1 [(validate.rules).message.required = true];
+}
+
+// PluginsResponse is a message which will be used in the AmeshService.
+// It's sent by the control plane, and contains extra plugin configurations of the proxy.
+message PluginsResponse {
+  // error_message contains the error details about the PluginsRequest.
+  // Proxy instance should detect the error message and decide to retry or
+  // exit itself.
+  google.rpc.Status error_message = 1;
+  // the proxy needed plugins
+  repeated AmeshPluginConfig plugins = 2;
+}
+
+// Controller service
+service AmeshService {
+  rpc StreamPlugins(PluginsRequest)
+      returns (stream PluginsResponse) {
+  }
+}

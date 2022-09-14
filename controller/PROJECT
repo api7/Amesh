@@ -1,0 +1,16 @@
+domain: apisix.apache.org
+layout:
+- go.kubebuilder.io/v3
+multigroup: true
+projectName: test
+repo: github.com/api7/amesh
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: apisix.apache.org
+  kind: AmeshPluginConfig
+  path: github.com/api7/amesh/api/v1alpha1
+  version: v1alpha1
+version: "3"
