@@ -69,6 +69,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Logger:                 ctrl.Log.WithName("Manager"),
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
 		Port:                   9443,
@@ -135,14 +136,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "GRPC")
 		os.Exit(1)
 	}
+	ameshPluginConfigController.AddPodChangeListener(grpc)
 
 	// Startup
-	setupLog.Info("starting manager")
 	ctx := ctrl.SetupSignalHandler()
 	kubeInformerFactory.Start(ctx.Done())
 	ameshInformerFactory.Start(ctx.Done())
-	grpc.Run(ctx.Done())
+	go grpc.Run(ctx.Done())
 
+	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)

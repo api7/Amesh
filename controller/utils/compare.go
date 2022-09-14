@@ -92,6 +92,8 @@ func LabelsEqual(oldLabels, newLabels map[string]string) bool {
 }
 
 func DiffPods(lister v1lister.PodLister, ns string, oldSelector, newSelector labels.Selector) (onlyInOld, both, onlyInNew sets.String, err error) {
+	onlyInOld, both, onlyInNew = sets.NewString(), sets.NewString(), sets.NewString()
+
 	oldPods, err := lister.Pods(ns).List(oldSelector)
 	if err != nil {
 		return

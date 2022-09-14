@@ -111,7 +111,6 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	_ = log.FromContext(ctx)
 
 	r.Log.Info("reconciling amesh plugin config", "namespace", req.Namespace, "name", req.Name)
-	r.Log.V(4).Info("reconciling amesh plugin config", "namespace", req.Namespace, "name", req.Name)
 
 	instance := &ameshv1alpha1.AmeshPluginConfig{}
 	err := r.Client.Get(context.TODO(), req.NamespacedName, instance)
@@ -134,7 +133,7 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	r.pluginsCacheLock.RLock()
 	oldConfig, ok2 := r.pluginsCache[key]
 	r.pluginsCacheLock.RUnlock()
-	if oldConfig.Version >= instance.ResourceVersion {
+	if ok2 && oldConfig.Version >= instance.ResourceVersion {
 		return ctrl.Result{}, nil
 	}
 
@@ -221,7 +220,10 @@ func (r *AmeshPluginConfigReconciler) AddPodChangeListener(receiver types.PodCha
 // SendPluginsConfigs triggers a re-sync process of the pods.
 // Currently, we don't count the plugins passed, actual configs are retrieved from GetPodPluginConfigs
 func (r *AmeshPluginConfigReconciler) SendPluginsConfigs(ns string, names sets.String, plugins []ameshv1alpha1.AmeshPluginConfigPlugin) {
-	r.Log.Info("send plugins config", "ns", ns, "names", names)
+	if names.Len() <= 0 {
+		return
+	}
+	r.Log.Info("notify plugins config changed", "ns", ns, "pods", names.List())
 
 	r.subsLock.RLock()
 	defer r.subsLock.RUnlock()

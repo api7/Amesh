@@ -76,10 +76,10 @@ func NewGRPCController(GRPCServerAddr string, pluginConfigCache types.PodPluginC
 func (c *GRPCController) NotifyPodChange(updateEvent *types.UpdatePodPluginConfigEvent) {
 	for podName := range updateEvent.Pods {
 		// TODO: FIXME too many lock/unlock
-		c.Log.Info("Pod change event", "pod", updateEvent.Namespace+"/"+podName)
+		c.Log.Info("Pod change event received", "pod", updateEvent.Namespace+"/"+podName)
 		instance := c.instanceManager.get(updateEvent.Namespace + "/" + podName)
 		if instance != nil {
-			c.Log.Info("Pod changed, plugin changed", "pod", updateEvent.Namespace+"/"+podName)
+			c.Log.Info("Notify Pod plugin change event", "pod", updateEvent.Namespace+"/"+podName)
 			go func() {
 				instance.UpdateNotifyChan <- struct{}{} // updateEvent.Plugins
 			}()
@@ -91,13 +91,13 @@ func (c *GRPCController) Run(stopCh <-chan struct{}) {
 	c.stopCh = stopCh
 
 	go func() {
+		c.Log.Info("grpc server is running")
 		err := c.grpcSrv.Serve(c.grpcListener)
 		if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 			c.Log.Error(err, "grpc server serve loop aborted")
 		}
 	}()
 
-	c.Log.Info("grpc server is running")
 	<-stopCh
 	c.Log.Info("stop signal received, grpc server stopping")
 	if err := c.grpcListener.Close(); err != nil {
