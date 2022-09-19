@@ -48,6 +48,8 @@ type xdsProvisioner struct {
 	node   *corev3.Node
 	logger *log.Logger
 
+	amesh *ameshProvisioner
+
 	sendCh  chan *discoveryv3.DiscoveryRequest
 	recvCh  chan *discoveryv3.DiscoveryResponse
 	evChan  chan []types.Event
@@ -80,6 +82,8 @@ type Config struct {
 	LogOutput string `json:"log_output" yaml:"log_output"`
 	// The xds source
 	XDSConfigSource string `json:"xds_config_source" yaml:"xds_config_source"`
+	// The Amesh source
+	AmeshConfigSource string `json:"amesh_config_source" yaml:"amesh_config_source"`
 
 	Namespace string
 	IpAddress string
@@ -107,7 +111,7 @@ func NewXDSProvisioner(cfg *Config) (types.Provisioner, error) {
 		UserAgentName: fmt.Sprintf("amesh/%s", version.Short()),
 	}
 
-	return &xdsProvisioner{
+	p := &xdsProvisioner{
 		src:    src,
 		node:   node,
 		logger: logger,
@@ -116,7 +120,21 @@ func NewXDSProvisioner(cfg *Config) (types.Provisioner, error) {
 		recvCh:  make(chan *discoveryv3.DiscoveryResponse),
 		evChan:  make(chan []types.Event),
 		resetCh: make(chan error),
-	}, nil
+	}
+
+	if cfg.AmeshConfigSource != "" {
+		if !strings.HasPrefix(cfg.XDSConfigSource, "grpc://") {
+			return nil, errors.New("bad xds config source")
+		}
+		ameshSrc := strings.TrimPrefix(cfg.AmeshConfigSource, "grpc://")
+		ameshProvisioner, err := NewAmeshProvisioner(ameshSrc, cfg.LogLevel, cfg.LogOutput)
+		if err != nil {
+			return nil, err
+		}
+		p.amesh = ameshProvisioner
+	}
+
+	return p, nil
 }
 
 func (p *xdsProvisioner) EventsChannel() <-chan []types.Event {
@@ -124,9 +142,21 @@ func (p *xdsProvisioner) EventsChannel() <-chan []types.Event {
 }
 
 func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
-	p.logger.Infow("provisioner started")
-	defer p.logger.Info("provisioner exited")
+	p.logger.Infow("xds provisioner started")
+	defer p.logger.Info("xds provisioner exited")
 	defer close(p.evChan)
+
+	if p.amesh != nil {
+		go func() {
+			if err := p.amesh.Run(stop); err != nil {
+				p.logger.Errorw("failed to run Amesh provisioner",
+					zap.Error(err),
+				)
+			}
+		}()
+	} else {
+		p.logger.Info("Amesh source not configured, skip")
+	}
 
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -163,11 +193,11 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 			cleanup()
 			return nil
 		case err = <-p.resetCh:
-			p.logger.Errorw("grpc client reset, closing",
+			p.logger.Errorw("xds grpc client reset, closing",
 				zap.Error(err),
 			)
 			cleanup()
-			p.logger.Errorw("grpc client reset, try reconnect",
+			p.logger.Errorw("xds grpc client reset, try reconnect",
 				zap.Error(err),
 			)
 			continue

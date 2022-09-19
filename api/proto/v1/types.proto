@@ -11,7 +11,7 @@ import "validate/validate.proto";
 // Event represent a configuration change.
 message AmeshPlugin {
   // The plugin type
-  string type = 1 [(validate.rules).string = {in: ["pre-req", "post-req"]}];
+  string type = 1 [(validate.rules).string = {in: ["", "pre-req", "post-req"]}];
   // The plugin name
   string name = 2 [(validate.rules).string = {min_len: 1}];
   // The plugin config
@@ -19,7 +19,8 @@ message AmeshPlugin {
 }
 
 message AmeshPluginConfig {
-  repeated AmeshPlugin plugins = 1;
+  string name = 1 [(validate.rules).string = {min_len: 1}];
+  repeated AmeshPlugin plugins = 2;
   // The resource version. Proxy should apply the newest version only.
-  string version = 2 [(validate.rules).string = {min_len: 1}];
+  string version = 3 [(validate.rules).string = {min_len: 1}];
 }

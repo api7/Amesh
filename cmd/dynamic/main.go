@@ -18,6 +18,7 @@ import "C"
 
 import (
 	"context"
+	"os"
 	"unsafe"
 
 	"github.com/api7/gopkg/pkg/log"
@@ -37,7 +38,7 @@ func Log(msg string) {
 //export StartTestAmesh
 func StartTestAmesh(src string) {
 	ctx, cancel := context.WithCancel(context.Background())
-	agent, err := amesh.NewAgent(ctx, src, nil, nil, "debug", "stderr")
+	agent, err := amesh.NewAgent(ctx, src, "", nil, nil, "debug", "stderr")
 	if err != nil {
 		utils.Dief("failed to create generator: %v", err.Error())
 	}
@@ -58,9 +59,16 @@ func StartTestAmesh(src string) {
 
 //export initial
 func initial(dataZone, versionZone unsafe.Pointer) {
-	src := "grpc://istiod.istio-system.svc.cluster.local:15010"
+	src := os.Getenv("ISTIO_XDS_SOURCE")
+	if src == "" {
+		src = "grpc://istiod.istio-system.svc.cluster.local:15010"
+	}
+	ameshGrpc := os.Getenv("AMESH_GRPC_SOURCE")
+	if ameshGrpc == "" {
+		ameshGrpc = "grpc://amesh-controller.istio-system.svc.cluster.local:15810"
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	agent, err := amesh.NewAgent(ctx, src, dataZone, versionZone, "debug", "stderr")
+	agent, err := amesh.NewAgent(ctx, src, ameshGrpc, dataZone, versionZone, "debug", "stderr")
 	if err != nil {
 		utils.Dief("failed to create generator: %v", err.Error())
 	}

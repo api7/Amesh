@@ -145,6 +145,7 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	newPlugins := instance.Spec.Plugins
 	newConfig := &types.PodPluginConfig{
+		Name:    key,
 		Plugins: newPlugins,
 		Version: instance.ResourceVersion,
 	}

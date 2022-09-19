@@ -17,6 +17,7 @@ FROM golang:1.16.5 as amesh-sidecar-build-stage
 ARG ENABLE_PROXY=false
 WORKDIR /amesh
 
+COPY api/ api/
 COPY go.* ./
 RUN if [ "$ENABLE_PROXY" = "true" ]; then go env -w GOPROXY=https://goproxy.cn,direct ; fi \
     && go mod download

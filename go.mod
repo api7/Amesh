@@ -3,6 +3,7 @@ module github.com/api7/amesh
 go 1.17
 
 require (
+	github.com/api7/amesh/api/proto v0.0.0-00010101000000-000000000000
 	github.com/api7/gopkg v0.1.2
 	github.com/envoyproxy/go-control-plane v0.10.1
 	github.com/golang/protobuf v1.5.2
@@ -30,3 +31,5 @@ require (
 	golang.org/x/text v0.3.7 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
+
+replace github.com/api7/amesh/api/proto => ./api/go/proto

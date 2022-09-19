@@ -21,6 +21,7 @@ import (
 )
 
 type PodPluginConfig struct {
+	Name    string
 	Plugins []ameshv1alpha1.AmeshPluginConfigPlugin
 	Version string
 }

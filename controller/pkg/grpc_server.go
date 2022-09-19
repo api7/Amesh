@@ -117,6 +117,7 @@ func (c *GRPCController) sendPodPluginConfig(podKey string, srv protov1.AmeshSer
 	var pluginConfigs []*protov1.AmeshPluginConfig
 	for _, config := range configs {
 		pluginConfig := &protov1.AmeshPluginConfig{
+			Name:    config.Name,
 			Plugins: []*protov1.AmeshPlugin{},
 			Version: config.Version,
 		}

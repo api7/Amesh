@@ -72,22 +72,13 @@ plugins:
   - proxy-rewrite
 ```
 
-使用下列 Dockerfile 构建最终的镜像：
-
-```Dockerfile
-FROM amesh-apisix:dev
-
-WORKDIR /usr/local/apisix
-COPY apisix apisix
-COPY conf conf
-COPY libxds.so libxds.so
-```
-
-构建最终使用的 APISIX 镜像：
+构建最终使用的 Sidecar 镜像：
 
 ```bash
-docker build -t apisix:custom -f ./Dockerfile .
+make build-amesh-sidecar-image
 ```
+
+这将构建出 amesh-sidecar:dev 镜像，作为最终使用的 sidecar。
 
 ## 运行 Demo
 
@@ -126,8 +117,8 @@ helm install istio-discovery \
   --set global.proxy_init.image=amesh-iptables \
   --set global.proxy_init.tag=dev \
   --set global.proxy.hub="$YOUR_REGISTRY" \
-  --set global.proxy.image=apisix \
-  --set global.proxy.tag=custom \
+  --set global.proxy.image=amesh-sidecar \
+  --set global.proxy.tag=dev \
   --set global.imagePullPolicy=IfNotPresent \
   --set global.hub="docker.io/istio" \
   --set global.tag="$ISTIO_RELEASE" \
