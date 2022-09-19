@@ -110,6 +110,7 @@ func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme,
 func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
+	key := req.NamespacedName.String()
 	r.Log.Info("reconciling amesh plugin config", "namespace", req.Namespace, "name", req.Name)
 
 	instance := &ameshv1alpha1.AmeshPluginConfig{}
@@ -118,6 +119,27 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Return and don't requeue
+
+			r.Log.Error(err, "config plugin deleted", "key", key)
+			r.pluginsCacheLock.Lock()
+			delete(r.pluginsCache, key)
+			r.pluginsCacheLock.Unlock()
+
+			oldSelector, ok := r.selectorCache.Get(key)
+			if ok {
+				pods, err := r.podInformer.Lister().Pods(req.Namespace).List(oldSelector)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				podSet := sets.NewString()
+				for _, pod := range pods {
+					podSet.Insert(pod.Name)
+				}
+				r.SendPluginsConfigs(req.Namespace, podSet, nil)
+			}
+
+			r.selectorCache.Delete(key)
+
 			return ctrl.Result{}, nil
 		}
 		// requeue
@@ -129,7 +151,6 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
-	key := req.NamespacedName.String()
 	r.pluginsCacheLock.RLock()
 	oldConfig, ok2 := r.pluginsCache[key]
 	r.pluginsCacheLock.RUnlock()
@@ -152,6 +173,8 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	r.pluginsCacheLock.Lock()
 	r.pluginsCache[key] = newConfig
 	r.pluginsCacheLock.Unlock()
+
+	r.Log.Info("plugin updated", "key", key, "config", newConfig)
 
 	if !hasOldSelector {
 		oldSelector = labels.Everything()
@@ -248,6 +271,9 @@ func (r *AmeshPluginConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *AmeshPluginConfigReconciler) GetPodPluginConfigs(key string) ([]*types.PodPluginConfig, error) {
 	ns, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	pod, err := r.podInformer.Lister().Pods(ns).Get(name)

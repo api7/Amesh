@@ -17,6 +17,7 @@ package framework
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/testing"
@@ -24,6 +25,7 @@ import (
 	"github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/api7/amesh/e2e/framework/ameshcontroller"
 	"github.com/api7/amesh/e2e/framework/controlplane"
 )
 
@@ -47,12 +49,14 @@ type Framework struct {
 	tunnels     []*k8s.Tunnel
 
 	cp        controlplane.ControlPlane
+	amesh     ameshcontroller.AmeshController
 	namespace string
 }
 
 type Options struct {
 	KubeConfig string
 
+	AmeshControllerImage   string
 	ControlPlaneImage      string
 	SidecarInitImage       string
 	SidecarImage           string
@@ -84,6 +88,9 @@ func NewFramework(opts *Options) *Framework {
 			filepath.Join(e2eHome, "charts/base"),
 			filepath.Join(e2eHome, "charts/istio-discovery"),
 		}
+	}
+	if opts.AmeshControllerImage == "" {
+		opts.AmeshControllerImage = "amesh-controller:latest"
 	}
 
 	args := &ManifestArgs{
@@ -117,6 +124,14 @@ func NewFramework(opts *Options) *Framework {
 	}
 	f.cp = controlplane.NewIstioControlPlane(istioOpts)
 
+	f.amesh = ameshcontroller.NewAmeshController(&ameshcontroller.AmeshOptions{
+		KubeConfig:  f.opts.KubeConfig,
+		Namespace:   f.cpNamespace(),
+		KubectlOpts: f.kubectlOpts,
+		AmeshImage:  f.args.LocalRegistry + "/" + opts.AmeshControllerImage,
+		ChartsPath:  filepath.Join(e2eHome, "../controller/charts/amesh-controller"),
+	})
+
 	ginkgo.BeforeEach(f.beforeEach)
 	ginkgo.AfterEach(f.afterEach)
 
@@ -133,6 +148,7 @@ func (f *Framework) cpNamespace() string {
 func (f *Framework) deploy() {
 	assert.Nil(ginkgo.GinkgoT(), f.cp.Deploy(), "deploy istio")
 	assert.Nil(ginkgo.GinkgoT(), f.cp.InjectNamespace(f.namespace), "inject namespace")
+	assert.Nil(ginkgo.GinkgoT(), f.amesh.Deploy(), "deploy amesh-controller")
 
 	f.newHttpBin()
 }
@@ -141,7 +157,9 @@ func (f *Framework) beforeEach() {
 	err := k8s.CreateNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.namespace)
 	assert.Nil(ginkgo.GinkgoT(), err, "create namespace "+f.namespace)
 	err = k8s.CreateNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace())
-	assert.Nil(ginkgo.GinkgoT(), err, "create namespace "+f.cpNamespace())
+	if err != nil && !strings.Contains(err.Error(), "already exists") {
+		assert.Nil(ginkgo.GinkgoT(), err, "create namespace "+f.cpNamespace())
+	}
 	f.deploy()
 }
 
@@ -153,6 +171,8 @@ func (f *Framework) afterEach() {
 	// resources, which will be intact if we just only delete the cp namespace.
 	err = f.cp.Uninstall()
 	assert.Nil(ginkgo.GinkgoT(), err, "uninstall istio")
+
+	assert.Nil(ginkgo.GinkgoT(), f.amesh.Uninstall(), "uninstall amesh-controller")
 
 	err = k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace())
 	assert.Nil(ginkgo.GinkgoT(), err, "delete namespace "+f.cpNamespace())

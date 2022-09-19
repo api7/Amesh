@@ -72,7 +72,7 @@ build-apisix-image:
 build-amesh-sidecar-image: build-amesh-so-image
 	docker pull api7/amesh-apisix:v0.0.2
 	docker tag api7/amesh-apisix:v0.0.2 amesh-apisix:dev
-	docker build \
+	docker build --build-arg ENABLE_PROXY=$(ENABLE_PROXY) \
 		-f Dockerfiles/amesh-sidecar.Dockerfile \
 		-t $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) .
 

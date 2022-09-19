@@ -59,3 +59,25 @@ type Event struct {
 	// Revision is the revision that the event happened
 	Revision int64
 }
+
+type AmeshPluginProvider interface {
+	GetPlugins() []*ApisixPlugin
+}
+
+type ApisixExtPluginConfig struct {
+	Conf []*ApisixExtPlugin `json:"conf,omitempty" yaml:"conf,omitempty"`
+}
+
+type ApisixExtPlugin struct {
+	Name  string                 `json:"name,omitempty" yaml:"name,omitempty"`
+	Value map[string]interface{} `json:"value,omitempty" yaml:"value,omitempty"`
+}
+
+type ApisixPlugin struct {
+	// The plugin type
+	Type string `json:"type,omitempty" yaml:"type,omitempty"`
+	// The plugin name
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+	// The plugin config
+	Config map[string]interface{} `json:"config,omitempty" yaml:"config,omitempty"`
+}

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo/v2"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/api7/amesh/e2e/framework"
 )
@@ -37,7 +38,8 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 
 		if resp.Raw().StatusCode != http.StatusOK {
 			ginkgo.GinkgoT().Logf("status code is %v, please check logs", resp.Raw().StatusCode)
-			time.Sleep(time.Hour * 1000)
+			//time.Sleep(time.Hour * 1000)
+			assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
 		}
 		resp.Status(http.StatusOK)
 		resp.Headers().Value("Via").Array().Contains("APISIX")

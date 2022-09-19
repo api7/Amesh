@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/api7/gopkg/pkg/log"
@@ -62,6 +63,8 @@ type xdsProvisioner struct {
 	routeOwnership map[string]string
 	// static route configuration from listeners.
 	staticRouteConfigurations []*routev3.RouteConfiguration
+
+	routesLock sync.RWMutex
 	// last state of routes.
 	routes []*apisix.Route
 	// last state of upstreams.
@@ -183,7 +186,7 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 		}
 		p.logger.Info("xds connected")
 
-		if err := p.run(ctx, conn); err != nil {
+		if err := p.run(stop, conn); err != nil {
 			cleanup()
 			return err
 		}
@@ -192,6 +195,9 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 		case <-stop:
 			cleanup()
 			return nil
+		case <-p.amesh.EventsChannel():
+			p.logger.Info("amesh events received, updating routes")
+			p.UpdateRoutesPlugin()
 		case err = <-p.resetCh:
 			p.logger.Errorw("xds grpc client reset, closing",
 				zap.Error(err),
@@ -205,15 +211,15 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 	}
 }
 
-func (p *xdsProvisioner) run(ctx context.Context, conn *grpc.ClientConn) error {
-	client, err := discoveryv3.NewAggregatedDiscoveryServiceClient(conn).StreamAggregatedResources(ctx)
+func (p *xdsProvisioner) run(stop <-chan struct{}, conn *grpc.ClientConn) error {
+	client, err := discoveryv3.NewAggregatedDiscoveryServiceClient(conn).StreamAggregatedResources(context.Background())
 	if err != nil {
 		return err
 	}
 
-	go p.sendLoop(ctx, client)
-	go p.recvLoop(ctx, client)
-	go p.translateLoop(ctx)
+	go p.sendLoop(stop, client)
+	go p.recvLoop(stop, client)
+	go p.translateLoop(stop)
 	go p.firstSend()
 
 	return nil
@@ -241,10 +247,10 @@ func (p *xdsProvisioner) firstSend() {
 // sendLoop receives pending DiscoveryRequest objects and sends them to client.
 // Send operation will be retried continuously until successful or the context is
 // cancelled.
-func (p *xdsProvisioner) sendLoop(ctx context.Context, client discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient) {
+func (p *xdsProvisioner) sendLoop(stop <-chan struct{}, client discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient) {
 	for {
 		select {
-		case <-ctx.Done():
+		case <-stop:
 			return
 		case dr := <-p.sendCh:
 			p.logger.Debugw("sending discovery request",
@@ -265,12 +271,12 @@ func (p *xdsProvisioner) sendLoop(ctx context.Context, client discoveryv3.Aggreg
 
 // recvLoop receives DiscoveryResponse objects from the wire stream and sends them
 // to the recvCh channel.
-func (p *xdsProvisioner) recvLoop(ctx context.Context, client discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient) {
+func (p *xdsProvisioner) recvLoop(stop <-chan struct{}, client discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient) {
 	for {
 		dr, err := client.Recv()
 		if err != nil {
 			select {
-			case <-ctx.Done():
+			case <-stop:
 				return
 			default:
 				p.logger.Errorw("failed to receive discovery response",
@@ -294,7 +300,7 @@ func (p *xdsProvisioner) recvLoop(ctx context.Context, client discoveryv3.Aggreg
 		//)
 		go func(dr *discoveryv3.DiscoveryResponse) {
 			select {
-			case <-ctx.Done():
+			case <-stop:
 			case p.recvCh <- dr:
 			}
 		}(dr)
@@ -303,11 +309,11 @@ func (p *xdsProvisioner) recvLoop(ctx context.Context, client discoveryv3.Aggreg
 
 // translateLoop mediates the input DiscoveryResponse objects, translating
 // them APISIX resources, and generating an ACK request ultimately.
-func (p *xdsProvisioner) translateLoop(ctx context.Context) {
+func (p *xdsProvisioner) translateLoop(stop <-chan struct{}) {
 	var verInfo string
 	for {
 		select {
-		case <-ctx.Done():
+		case <-stop:
 			return
 		case resp := <-p.recvCh:
 			ackReq := &discoveryv3.DiscoveryRequest{
@@ -353,8 +359,10 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			}
 			newManifest.Routes = append(newManifest.Routes, partial...)
 		}
+		p.routesLock.Lock()
 		oldManifest.Routes = p.routes
 		p.routes = newManifest.Routes
+		p.routesLock.Unlock()
 
 	case types.ClusterUrl:
 		newUps := make(map[string]*apisix.Upstream)
@@ -450,7 +458,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			newManifest.Upstreams = append(newManifest.Upstreams, ups)
 		}
 
-		// TODO: FIXME: verify if this could happen when the service is dangling without pods
+		// TODO: FIXME: this could happen when the service is dangling without pods
 		if len(requireFurtherEds) > 0 {
 			p.logger.Infow("empty endpoint, new EDS discovery request",
 				zap.Any("eds_required_clusters", requireFurtherEds),
@@ -555,10 +563,10 @@ func (p *xdsProvisioner) sendRds(rdsNames []string) {
 	p.sendCh <- dr
 }
 
-func (p *xdsProvisioner) generateIncrementalEvents(m, o *util.Manifest) []types.Event {
+func (p *xdsProvisioner) generateIncrementalEvents(newManifest, oldManifest *util.Manifest) []types.Event {
 	p.logger.Debugw("comparing old and new manifests",
-		zap.Any("old", o),
-		zap.Any("new", m),
+		zap.Any("old", oldManifest),
+		zap.Any("new", newManifest),
 	)
 	var (
 		added   *util.Manifest
@@ -566,12 +574,12 @@ func (p *xdsProvisioner) generateIncrementalEvents(m, o *util.Manifest) []types.
 		updated *util.Manifest
 		count   int
 	)
-	if o == nil {
-		added = m
-	} else if m == nil {
-		deleted = o
+	if oldManifest == nil {
+		added = newManifest
+	} else if newManifest == nil {
+		deleted = oldManifest
 	} else {
-		added, deleted, updated = o.DiffFrom(m)
+		added, deleted, updated = oldManifest.DiffFrom(newManifest)
 	}
 	if added != nil {
 		count += added.Size()
@@ -604,4 +612,34 @@ func (p *xdsProvisioner) generateIncrementalEvents(m, o *util.Manifest) []types.
 		events = append(events, updated.Events(types.EventUpdate)...)
 	}
 	return events
+}
+
+func (p *xdsProvisioner) UpdateRoutesPlugin() {
+	newManifest, oldManifest := p.updateRoutesPluginManifest()
+	events := p.generateIncrementalEvents(newManifest, oldManifest)
+	go func() {
+		p.logger.Info("updating routes plugin")
+		p.evChan <- events
+	}()
+}
+
+func (p *xdsProvisioner) updateRoutesPluginManifest() (*util.Manifest, *util.Manifest) {
+	p.routesLock.Lock()
+	defer p.routesLock.Unlock()
+
+	oldManifest := &util.Manifest{}
+	newManifest := &util.Manifest{}
+
+	// TODO: Check revision to skip unnecessary updates
+	oldManifest.Routes = p.routes
+	var newRoutes []*apisix.Route
+	for _, oldRoute := range oldManifest.Routes {
+		route := oldRoute.Copy()
+		route = p.patchRoutePlugins(route)
+		newRoutes = append(newRoutes, route)
+	}
+	p.routes = newRoutes
+	newManifest.Routes = newRoutes
+
+	return newManifest, oldManifest
 }

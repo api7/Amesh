@@ -29,6 +29,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	ameshv1alpha1 "github.com/api7/amesh/controller/apis/amesh/v1alpha1"
+	"github.com/api7/amesh/pkg/amesh/types"
 	"github.com/api7/amesh/pkg/amesh/util"
 	"github.com/api7/amesh/pkg/apisix"
 )
@@ -145,9 +147,44 @@ func (p *xdsProvisioner) translateVirtualHost(prefix string, vhost *routev3.Virt
 			Vars:       vars,
 			Desc:       "GENERATED_BY_AMESH: VIRTUAL_HOST: " + vhost.Name,
 		}
+
+		r = p.patchRoutePlugins(r)
+
 		routes = append(routes, r)
 	}
 	return routes, nil
+}
+
+func (p *xdsProvisioner) patchRoutePlugins(route *apisix.Route) *apisix.Route {
+	route.Plugins = map[string]interface{}{}
+	plugins := p.amesh.GetPlugins()
+
+	preReq := types.ApisixExtPluginConfig{}
+	postReq := types.ApisixExtPluginConfig{}
+	for _, plugin := range plugins {
+		switch plugin.Type {
+		case "":
+			route.Plugins[plugin.Name] = plugin.Config
+			p.logger.Infow("patched plugin", zap.Any("config", plugin.Config))
+		case ameshv1alpha1.AmeshPluginConfigTypePreRequest:
+			preReq.Conf = append(preReq.Conf, &types.ApisixExtPlugin{
+				Name:  plugin.Name,
+				Value: plugin.Config,
+			})
+		case ameshv1alpha1.AmeshPluginConfigTypePostRequest:
+			postReq.Conf = append(postReq.Conf, &types.ApisixExtPlugin{
+				Name:  plugin.Name,
+				Value: plugin.Config,
+			})
+		}
+	}
+	if len(preReq.Conf) > 0 {
+		route.Plugins["ext-plugin-pre-req"] = preReq
+	}
+	if len(postReq.Conf) > 0 {
+		route.Plugins["ext-plugin-post-req"] = postReq
+	}
+	return route
 }
 
 func (p *xdsProvisioner) getClusterName(route *routev3.Route) (string, bool) {

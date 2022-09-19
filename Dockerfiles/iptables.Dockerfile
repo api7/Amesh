@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-FROM golang:1.16.5 as amesh-iptables-build-stage
+FROM golang:1.18 as amesh-iptables-build-stage
 
 ARG ENABLE_PROXY=false
 WORKDIR /amesh-iptables

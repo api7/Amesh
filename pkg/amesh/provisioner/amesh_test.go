@@ -14,7 +14,8 @@ import (
 	ameshapi "github.com/api7/amesh/api/proto/v1"
 )
 
-func TestAmeshGrpcServer(t *testing.T) {
+//func TestAmeshGrpcServer(t *testing.T) {
+func AmeshGrpcServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -30,7 +31,7 @@ func TestAmeshGrpcServer(t *testing.T) {
 			zap.Error(err),
 		)
 	}
-	client, err := ameshapi.NewAmeshServiceClient(conn).StreamPlugins(ctx, &ameshapi.PluginsRequest{
+	client, err := ameshapi.NewAmeshServiceClient(conn).StreamPlugins(context.Background(), &ameshapi.PluginsRequest{
 		Instance: &ameshapi.Instance{
 			Key: "test/consumer",
 		},
@@ -40,8 +41,6 @@ func TestAmeshGrpcServer(t *testing.T) {
 		dr, err := client.Recv()
 		if err != nil {
 			select {
-			case <-ctx.Done():
-				return
 			default:
 				log.Errorw("failed to receive discovery response",
 					zap.Error(err),
@@ -57,7 +56,7 @@ func TestAmeshGrpcServer(t *testing.T) {
 				continue
 			}
 		}
-		log.Debugw("got discovery response",
+		log.Errorw("got discovery response",
 			zap.Any("body", dr),
 		)
 	}

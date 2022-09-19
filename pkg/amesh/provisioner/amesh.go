@@ -2,6 +2,7 @@ package provisioner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -14,6 +15,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	ameshapi "github.com/api7/amesh/api/proto/v1"
+	"github.com/api7/amesh/pkg/amesh/types"
+)
+
+var (
+	_ types.AmeshPluginProvider = (*ameshProvisioner)(nil)
 )
 
 type ameshProvisioner struct {
@@ -25,9 +31,10 @@ type ameshProvisioner struct {
 	logger *log.Logger
 
 	configLock     sync.RWMutex
-	config         []*ameshapi.AmeshPlugin
+	config         []*types.ApisixPlugin
 	configRevision map[string]string
 
+	evChan  chan struct{}
 	resetCh chan error
 }
 
@@ -56,7 +63,9 @@ func NewAmeshProvisioner(src, logLevel, logOutput string) (*ameshProvisioner, er
 		name:           name,
 		logger:         logger,
 		configRevision: map[string]string{},
-		resetCh:        make(chan error),
+
+		evChan:  make(chan struct{}),
+		resetCh: make(chan error),
 	}, nil
 }
 
@@ -65,8 +74,8 @@ func (p *ameshProvisioner) Run(stop <-chan struct{}) error {
 	defer p.logger.Info("amesh provisioner exited")
 
 	for {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		conn, err := grpc.DialContext(ctx, p.src,
+		dialCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		conn, err := grpc.DialContext(dialCtx, p.src,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
 		)
@@ -89,7 +98,7 @@ func (p *ameshProvisioner) Run(stop <-chan struct{}) error {
 		}
 		p.logger.Info("amesh connected")
 
-		if err := p.run(ctx, conn); err != nil {
+		if err := p.run(stop, conn); err != nil {
 			cleanup()
 			return err
 		}
@@ -111,8 +120,8 @@ func (p *ameshProvisioner) Run(stop <-chan struct{}) error {
 	}
 }
 
-func (p *ameshProvisioner) run(ctx context.Context, conn *grpc.ClientConn) error {
-	client, err := ameshapi.NewAmeshServiceClient(conn).StreamPlugins(ctx, &ameshapi.PluginsRequest{
+func (p *ameshProvisioner) run(stop <-chan struct{}, conn *grpc.ClientConn) error {
+	client, err := ameshapi.NewAmeshServiceClient(conn).StreamPlugins(context.Background(), &ameshapi.PluginsRequest{
 		Instance: &ameshapi.Instance{
 			Key: p.namespace + "/" + p.name,
 		},
@@ -121,27 +130,31 @@ func (p *ameshProvisioner) run(ctx context.Context, conn *grpc.ClientConn) error
 		return err
 	}
 
-	go p.recvLoop(ctx, client)
+	go p.recvLoop(stop, client)
 
 	return nil
 }
 
 // recvLoop receives DiscoveryResponse objects from the wire stream and sends them
 // to the recvCh channel.
-func (p *ameshProvisioner) recvLoop(ctx context.Context, client ameshapi.AmeshService_StreamPluginsClient) {
+func (p *ameshProvisioner) recvLoop(stop <-chan struct{}, client ameshapi.AmeshService_StreamPluginsClient) {
+
+	// TODO: DELET EVENT
+
 	for {
 		dr, err := client.Recv()
 		if err != nil {
 			select {
-			case <-ctx.Done():
+			case <-stop:
 				return
 			default:
-				p.logger.Errorw("failed to receive discovery response",
+				p.logger.Errorw("failed to receive amesh plugin response",
 					zap.Error(err),
 				)
 				errMsg := err.Error()
 				if strings.Contains(errMsg, "transport is closing") ||
-					strings.Contains(errMsg, "DeadlineExceeded") {
+					strings.Contains(errMsg, "DeadlineExceeded") ||
+					strings.Contains(errMsg, "EOF") {
 					p.logger.Errorw("trigger grpc client reset",
 						zap.Error(err),
 					)
@@ -151,13 +164,12 @@ func (p *ameshProvisioner) recvLoop(ctx context.Context, client ameshapi.AmeshSe
 				continue
 			}
 		}
-		//p.logger.Debugw("got discovery response",
-		//	zap.String("type", dr.TypeUrl),
-		//	zap.Any("body", dr),
-		//)
+		p.logger.Debugw("got amesh plugin config",
+			zap.Any("body", dr),
+		)
 		go func(dr *ameshapi.PluginsResponse) {
 			select {
-			case <-ctx.Done():
+			case <-stop:
 			default:
 				p.updatePlugins(dr)
 			}
@@ -171,7 +183,7 @@ func (p *ameshProvisioner) updatePlugins(resp *ameshapi.PluginsResponse) {
 		return
 	}
 
-	var plugins []*ameshapi.AmeshPlugin
+	var plugins []*types.ApisixPlugin
 	p.configLock.Lock()
 	defer p.configLock.Unlock()
 
@@ -182,9 +194,40 @@ func (p *ameshProvisioner) updatePlugins(resp *ameshapi.PluginsResponse) {
 			continue
 		}
 		p.configRevision[plugin.Name] = plugin.Version
-		plugins = append(plugins, plugin.Plugins...)
+
+		var apisixPlugins []*types.ApisixPlugin
+		pluginValues := map[string]map[string]interface{}{}
+		for _, plugin := range plugin.Plugins {
+			var anyValue map[string]interface{}
+			err := json.Unmarshal([]byte(plugin.Config), &anyValue)
+			if err != nil {
+				p.logger.Errorw("failed to unmarshal plugin config",
+					zap.Error(err),
+					zap.Any("config", plugin.Config),
+				)
+				continue
+			}
+			apisixPlugins = append(apisixPlugins, &types.ApisixPlugin{
+				Type:   plugin.Type,
+				Name:   plugin.Name,
+				Config: anyValue,
+			})
+			pluginValues[plugin.Name] = anyValue
+		}
+
+		plugins = append(plugins, apisixPlugins...)
 	}
 	p.config = plugins
 
-	// TODO: TRIGGER ROUTES CHANGE
+	p.evChan <- struct{}{}
+}
+
+func (p *ameshProvisioner) GetPlugins() []*types.ApisixPlugin {
+	p.configLock.RLock()
+	defer p.configLock.RUnlock()
+	return p.config
+}
+
+func (p *ameshProvisioner) EventsChannel() <-chan struct{} {
+	return p.evChan
 }

@@ -73,3 +73,43 @@ type Route struct {
 	// update_time indicate the last update timestamp of this route.
 	UpdateTime int64 `json:"update_time,omitempty"`
 }
+
+func (route *Route) Copy() *Route {
+	r := &Route{
+		Uris:            nil,
+		Name:            route.Name,
+		Id:              route.Id,
+		Desc:            route.Desc,
+		Priority:        route.Priority,
+		Methods:         nil,
+		Hosts:           nil,
+		RemoteAddrs:     route.RemoteAddrs,
+		Vars:            route.Vars,
+		Plugins:         map[string]interface{}{},
+		ServiceId:       route.ServiceId,
+		UpstreamId:      route.UpstreamId,
+		Status:          route.Status,
+		Timeout:         route.Timeout,
+		EnableWebsocket: route.EnableWebsocket,
+		Labels:          map[string]string{},
+		CreateTime:      route.CreateTime,
+		UpdateTime:      route.UpdateTime,
+	}
+	for _, val := range route.Uris {
+		r.Uris = append(r.Uris, val)
+	}
+	for _, val := range route.Methods {
+		r.Methods = append(r.Methods, val)
+	}
+	for _, val := range route.Hosts {
+		r.Hosts = append(r.Hosts, val)
+	}
+	for k, v := range route.Plugins {
+		r.Plugins[k] = v
+	}
+	for k, v := range route.Labels {
+		r.Labels[k] = v
+	}
+
+	return r
+}

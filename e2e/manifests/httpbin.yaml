@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: httpbin
+  labels:
+    account: httpbin
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpbin
+  labels:
+    app: httpbin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpbin
+  template:
+    metadata:
+      labels:
+        app: httpbin
+    spec:
+      serviceAccountName: httpbin
+      containers:
+        - name: httpbin
+          image: kennethreitz/httpbin
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/bin/python3
+          args:
+            - /usr/local/bin/gunicorn
+            - "-b"
+            - "0.0.0.0:80"
+            - "httpbin:app"
+            - "-k"
+            - "gevent"
+            - "--log-level"
+            - "debug"
+          ports:
+            - containerPort: 9080
+          env:
+            - name: DEBUG
+              value: "True"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: httpbin
+  name: httpbin
+spec:
+  ports:
+    - port: 9080
+      name: http
+  selector:
+    app: httpbin

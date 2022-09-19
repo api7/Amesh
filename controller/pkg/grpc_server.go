@@ -113,6 +113,9 @@ func (c *GRPCController) sendPodPluginConfig(podKey string, srv protov1.AmeshSer
 		c.Log.V(4).Error(err, "failed to query plugin configs", "pod", podKey)
 		return status.Errorf(codes.Aborted, err.Error())
 	}
+	if configs == nil || len(configs) == 0 {
+		return nil
+	}
 
 	var pluginConfigs []*protov1.AmeshPluginConfig
 	for _, config := range configs {
