@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/api7/gopkg/pkg/log"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
 
@@ -37,15 +38,13 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		resp := tunnel.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
 
 		if resp.Raw().StatusCode != http.StatusOK {
-			ginkgo.GinkgoT().Logf("status code is %v, please check logs", resp.Raw().StatusCode)
+			log.Infof("status code is %v, please check logs", resp.Raw().StatusCode)
 			//time.Sleep(time.Hour * 1000)
 			assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
 		}
 		resp.Status(http.StatusOK)
 		resp.Headers().Value("Via").Array().Contains("APISIX")
 		resp.Body().Contains("origin")
-
-		ginkgo.GinkgoT().Logf("status code is 200, please check logs")
 	})
 
 	ginkgo.It("should be able to proxy inside mesh", func() {
@@ -58,14 +57,12 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		resp := tunnel.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
 
 		if resp.Raw().StatusCode != http.StatusOK {
-			ginkgo.GinkgoT().Logf("status code is %v, please check logs", resp.Raw().StatusCode)
+			log.Infof("status code is %v, please check logs", resp.Raw().StatusCode)
 			//time.Sleep(time.Hour * 1000)
 			assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
 		}
 		resp.Status(http.StatusOK)
 		resp.Headers().Value("Via").Array().Contains("APISIX")
 		resp.Body().Contains("origin")
-
-		ginkgo.GinkgoT().Logf("status code is 200, please check logs")
 	})
 })

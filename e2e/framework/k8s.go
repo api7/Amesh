@@ -16,13 +16,13 @@ package framework
 
 import (
 	"context"
-	"github.com/api7/gopkg/pkg/log"
-	"github.com/stretchr/testify/assert"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
+	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -58,7 +58,7 @@ func (f *Framework) WaitForNamespaceDeletion(namespace string) {
 	if err == nil {
 		if ns.DeletionTimestamp != nil {
 			// wait for deletion
-			log.Errorf("namespace %s is deleting, wait", namespace)
+			log.Infof("namespace %s is deleting, wait", namespace)
 
 			condFunc := func() (bool, error) {
 				_, err := k8s.GetNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, namespace)
@@ -69,7 +69,7 @@ func (f *Framework) WaitForNamespaceDeletion(namespace string) {
 						return false, err
 					}
 				}
-				log.Errorf("namespace %s is deleting, waiting...", namespace)
+				log.Infof("namespace %s is deleting, waiting...", namespace)
 				return false, nil
 			}
 			err = waitExponentialBackoff(condFunc)

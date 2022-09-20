@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/onsi/ginkgo/v2"
@@ -146,8 +147,11 @@ func (f *Framework) cpNamespace() string {
 }
 
 func (f *Framework) deploy() {
+	log.Infof("installing istio")
 	assert.Nil(ginkgo.GinkgoT(), f.cp.Deploy(), "deploy istio")
 	assert.Nil(ginkgo.GinkgoT(), f.cp.InjectNamespace(f.namespace), "inject namespace")
+
+	log.Infof("installing amesh-controller")
 	assert.Nil(ginkgo.GinkgoT(), f.amesh.Deploy(), "deploy amesh-controller")
 
 	f.newHttpBin()
@@ -167,18 +171,17 @@ func (f *Framework) beforeEach() {
 }
 
 func (f *Framework) afterEach() {
+	log.Infof("cleanup...")
+
 	err := k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.namespace)
 	assert.Nil(ginkgo.GinkgoT(), err, "delete namespace "+f.namespace)
 
 	// Should delete the control plane components explicitly since there are some cluster scoped
 	// resources, which will be intact if we just only delete the cp namespace.
-	err = f.cp.Uninstall()
-	assert.Nil(ginkgo.GinkgoT(), err, "uninstall istio")
 
+	assert.Nil(ginkgo.GinkgoT(), f.cp.Uninstall(), "uninstall istio")
 	assert.Nil(ginkgo.GinkgoT(), f.amesh.Uninstall(), "uninstall amesh-controller")
-
-	err = k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace())
-	assert.Nil(ginkgo.GinkgoT(), err, "delete namespace "+f.cpNamespace())
+	assert.Nil(ginkgo.GinkgoT(), k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace()), "delete namespace "+f.cpNamespace())
 
 	for _, tunnel := range f.tunnels {
 		tunnel.Close()

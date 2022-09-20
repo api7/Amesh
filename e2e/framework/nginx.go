@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/api7/gopkg/pkg/log"
 	"github.com/gavv/httpexpect/v2"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
@@ -139,7 +140,7 @@ func (f *Framework) waitUntilAllNginxPodsReady(name string) error {
 			return false, err
 		}
 		if len(items) == 0 {
-			ginkgo.GinkgoT().Log("no nginx pods created")
+			log.Infof("no nginx pods created")
 			return false, nil
 		}
 		for _, pod := range items {

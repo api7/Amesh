@@ -13,7 +13,7 @@
 # limitations under the License.
 
 BINDIR ?= ./bin
-ENABLE_PROXY ?= true
+ENABLE_PROXY ?= false
 REGISTRY ?="localhost:5000"
 export AMESH_STANDALONE_IMAGE ?= amesh-standalone
 export AMESH_STANDALONE_IMAGE_TAG ?= dev

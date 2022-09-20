@@ -15,8 +15,24 @@
 package e2e
 
 import (
+	"github.com/api7/gopkg/pkg/log"
+	terratestlogger "github.com/gruntwork-io/terratest/modules/logger"
+
 	_ "github.com/api7/amesh/e2e/test/amesh"
 	_ "github.com/api7/amesh/e2e/test/base"
 )
 
-func runE2E() {}
+func runE2E() {
+	var err error
+	log.DefaultLogger, err = log.NewLogger(
+		log.WithLogLevel("info"),
+		log.WithSkipFrames(3),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	terratestlogger.Default = terratestlogger.Discard
+	terratestlogger.Terratest = terratestlogger.Discard
+	terratestlogger.Global = terratestlogger.Discard
+}

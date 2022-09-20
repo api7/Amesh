@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
@@ -81,12 +82,13 @@ func (f *Framework) waitUntilAllHttpBinPodsReady() error {
 		LabelSelector: "app=httpbin",
 	}
 	condFunc := func() (bool, error) {
+		log.Infof("waiting httpbin pods...")
 		items, err := k8s.ListPodsE(ginkgo.GinkgoT(), f.kubectlOpts, opts)
 		if err != nil {
 			return false, err
 		}
 		if len(items) == 0 {
-			ginkgo.GinkgoT().Log("no httpbin pods created")
+			log.Infof("no httpbin pods created")
 			clientset, err := k8s.GetKubernetesClientFromOptionsE(ginkgo.GinkgoT(), f.kubectlOpts)
 			if err != nil {
 				return false, err
@@ -97,12 +99,12 @@ func (f *Framework) waitUntilAllHttpBinPodsReady() error {
 				return false, err
 			}
 			if len(deployments.Items) == 0 {
-				ginkgo.GinkgoT().Log("no httpbin deployment created")
+				log.Infof("no httpbin deployment created")
 				return false, nil
 			}
 			for _, deployment := range deployments.Items {
 				for _, cond := range deployment.Status.Conditions {
-					ginkgo.GinkgoT().Logf("deployment %v: %v", deployment.Name, cond.String())
+					log.Debugf("deployment %v: %v", deployment.Name, cond.String())
 				}
 			}
 			return false, nil
