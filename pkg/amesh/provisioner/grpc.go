@@ -284,8 +284,9 @@ func (p *xdsProvisioner) recvLoop(stop <-chan struct{}, client discoveryv3.Aggre
 				)
 				errMsg := err.Error()
 				if strings.Contains(errMsg, "transport is closing") ||
-					strings.Contains(errMsg, "DeadlineExceeded") {
-					p.logger.Errorw("trigger grpc client reset",
+					strings.Contains(errMsg, "DeadlineExceeded") ||
+					strings.Contains(errMsg, "EOF") {
+					p.logger.Errorw("trigger xds grpc client reset",
 						zap.Error(err),
 					)
 					p.resetCh <- err

@@ -154,6 +154,9 @@ func (f *Framework) deploy() {
 }
 
 func (f *Framework) beforeEach() {
+	f.WaitForNamespaceDeletion(f.namespace)
+	f.WaitForNamespaceDeletion(f.cpNamespace())
+
 	err := k8s.CreateNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.namespace)
 	assert.Nil(ginkgo.GinkgoT(), err, "create namespace "+f.namespace)
 	err = k8s.CreateNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace())
@@ -180,4 +183,5 @@ func (f *Framework) afterEach() {
 	for _, tunnel := range f.tunnels {
 		tunnel.Close()
 	}
+	f.tunnels = nil
 }

@@ -75,21 +75,6 @@ type AmeshOptions struct {
 
 // NewAmeshController creates an amesh controller.
 func NewAmeshController(opts *AmeshOptions) AmeshController {
-	kc := opts.KubeConfig
-	image := opts.AmeshImage
-
-	install := exec.Command(_helm, "install", "amesh-controller", "--namespace", opts.Namespace, "--kubeconfig", kc,
-		"--set", "controller.image="+image,
-		opts.ChartsPath,
-	)
-	uninstall := exec.Command(_helm, "uninstall", "amesh-controller", "--namespace", opts.Namespace, "--kubeconfig", kc)
-
-	discoveryStderr := bytes.NewBuffer(nil)
-	cleanupDiscoveryStderr := bytes.NewBuffer(nil)
-
-	install.Stderr = discoveryStderr
-	uninstall.Stderr = cleanupDiscoveryStderr
-
 	logger, err := log.NewLogger(
 		log.WithContext("amesh"),
 		log.WithLogLevel("error"),
@@ -101,12 +86,8 @@ func NewAmeshController(opts *AmeshOptions) AmeshController {
 	}
 
 	return &amesh{
-		logger:          logger,
-		install:         install,
-		uninstall:       uninstall,
-		options:         opts,
-		installStderr:   discoveryStderr,
-		uninstallStderr: cleanupDiscoveryStderr,
+		logger:  logger,
+		options: opts,
 	}
 }
 
@@ -122,7 +103,33 @@ func (cp *amesh) Addr() string {
 	return "grpc://" + cp.clusterIP + ":15810"
 }
 
+func (cp *amesh) initCmd() {
+	opts := cp.options
+
+	kc := opts.KubeConfig
+	image := opts.AmeshImage
+
+	install := exec.Command(_helm, "install", "amesh-controller", "--namespace", opts.Namespace, "--kubeconfig", kc,
+		"--set", "controller.image="+image,
+		opts.ChartsPath,
+	)
+	uninstall := exec.Command(_helm, "uninstall", "amesh-controller", "--namespace", opts.Namespace, "--kubeconfig", kc)
+
+	discoveryStderr := bytes.NewBuffer(nil)
+	cleanupDiscoveryStderr := bytes.NewBuffer(nil)
+
+	install.Stderr = discoveryStderr
+	uninstall.Stderr = cleanupDiscoveryStderr
+
+	cp.install = install
+	cp.uninstall = uninstall
+	cp.installStderr = discoveryStderr
+	cp.uninstallStderr = cleanupDiscoveryStderr
+}
+
 func (cp *amesh) Deploy() error {
+	cp.initCmd()
+
 	err := cp.install.Run()
 	if err != nil {
 		log.Errorw("failed to run amesh-controller install command",

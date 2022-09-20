@@ -155,7 +155,7 @@ func (p *ameshProvisioner) recvLoop(stop <-chan struct{}, client ameshapi.AmeshS
 				if strings.Contains(errMsg, "transport is closing") ||
 					strings.Contains(errMsg, "DeadlineExceeded") ||
 					strings.Contains(errMsg, "EOF") {
-					p.logger.Errorw("trigger grpc client reset",
+					p.logger.Errorw("trigger amesh grpc client reset",
 						zap.Error(err),
 					)
 					p.resetCh <- err

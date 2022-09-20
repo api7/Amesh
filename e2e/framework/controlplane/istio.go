@@ -73,6 +73,37 @@ type IstioOptions struct {
 
 // NewIstioControlPlane creates an istio control plane.
 func NewIstioControlPlane(opts *IstioOptions) ControlPlane {
+	logger, err := log.NewLogger(
+		log.WithContext("istio"),
+		log.WithLogLevel("error"),
+	)
+	if err != nil {
+		assert.Nil(ginkgo.GinkgoT(), err)
+
+		return nil
+	}
+
+	return &istio{
+		logger:  logger,
+		options: opts,
+	}
+}
+
+func (cp *istio) Namespace() string {
+	return cp.options.Namespace
+}
+
+func (cp *istio) Type() string {
+	return "istio"
+}
+
+func (cp *istio) Addr() string {
+	return "grpc://" + cp.clusterIP + ":15010"
+}
+
+func (cp *istio) initCmd() {
+	opts := cp.options
+
 	kc := opts.KubeConfig
 	image := opts.IstioImage
 
@@ -104,43 +135,19 @@ func NewIstioControlPlane(opts *IstioOptions) ControlPlane {
 	discovery.Stderr = discoveryStderr
 	deleteDiscovery.Stderr = cleanupDiscoveryStderr
 
-	logger, err := log.NewLogger(
-		log.WithContext("istio"),
-		log.WithLogLevel("error"),
-	)
-	if err != nil {
-		assert.Nil(ginkgo.GinkgoT(), err)
-
-		return nil
-	}
-
-	return &istio{
-		logger:                 logger,
-		base:                   base,
-		discovery:              discovery,
-		cleanupBase:            deleteBase,
-		cleanupDiscovery:       deleteDiscovery,
-		options:                opts,
-		baseStderr:             baseStderr,
-		cleanupBaseStderr:      cleanupBaseStderr,
-		discoveryStderr:        discoveryStderr,
-		cleanupDiscoveryStderr: cleanupDiscoveryStderr,
-	}
-}
-
-func (cp *istio) Namespace() string {
-	return cp.options.Namespace
-}
-
-func (cp *istio) Type() string {
-	return "istio"
-}
-
-func (cp *istio) Addr() string {
-	return "grpc://" + cp.clusterIP + ":15010"
+	cp.base = base
+	cp.discovery = discovery
+	cp.cleanupBase = deleteBase
+	cp.cleanupDiscovery = deleteDiscovery
+	cp.baseStderr = baseStderr
+	cp.cleanupBaseStderr = cleanupBaseStderr
+	cp.discoveryStderr = discoveryStderr
+	cp.cleanupDiscoveryStderr = cleanupDiscoveryStderr
 }
 
 func (cp *istio) Deploy() error {
+	cp.initCmd()
+
 	err := cp.base.Run()
 	if err != nil {
 		log.Errorw("failed to run istio-base install command",

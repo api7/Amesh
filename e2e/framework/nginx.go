@@ -58,7 +58,7 @@ spec:
       labels:
         app: {{ .Name }}
       annotations:
-        sidecar.istio.io/inject: "false"
+        sidecar.istio.io/inject: "{{ .InMesh }}"
     spec:
       volumes:
       - name: conf
@@ -94,9 +94,18 @@ type renderArgs struct {
 	*ManifestArgs
 	Name      string
 	ConfigMap string
+	InMesh    bool
 }
 
-func (f *Framework) CreateNginxTo(svc string) string {
+func (f *Framework) CreateNginxOutsideMeshTo(svc string) string {
+	return f.createNginxTo(svc, false)
+}
+
+func (f *Framework) CreateNginxInMeshTo(svc string) string {
+	return f.createNginxTo(svc, true)
+}
+
+func (f *Framework) createNginxTo(svc string, inMesh bool) string {
 
 	conf := fmt.Sprintf(nginxConfTemplate, svc, svc)
 
@@ -108,6 +117,7 @@ func (f *Framework) CreateNginxTo(svc string) string {
 		ManifestArgs: f.args,
 		Name:         randomName,
 		ConfigMap:    randomName,
+		InMesh:       inMesh,
 	}
 	artifact, err := RenderManifest(nginxTemplate, args)
 	assert.Nil(ginkgo.GinkgoT(), err, "render nginx template")
