@@ -38,7 +38,7 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		resp := tunnel.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
 
 		if resp.Raw().StatusCode != http.StatusOK {
-			log.Infof("status code is %v, please check logs", resp.Raw().StatusCode)
+			log.Errorf("status code is %v, please check logs", resp.Raw().StatusCode)
 			//time.Sleep(time.Hour * 1000)
 			assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
 		}
@@ -57,7 +57,7 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		resp := tunnel.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
 
 		if resp.Raw().StatusCode != http.StatusOK {
-			log.Infof("status code is %v, please check logs", resp.Raw().StatusCode)
+			log.Errorf("status code is %v, please check logs", resp.Raw().StatusCode)
 			//time.Sleep(time.Hour * 1000)
 			assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
 		}

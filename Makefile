@@ -105,6 +105,7 @@ kind-up:
 
 .PHONY: e2e-test
 e2e-test:
+	kubectl apply -k $(shell pwd)/controller/config/crd
 	AMESH_E2E_HOME=$(shell pwd)/e2e \
 		cd e2e && \
 		go env -w GOFLAGS="-mod=mod" && \

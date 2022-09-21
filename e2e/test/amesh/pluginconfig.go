@@ -111,7 +111,7 @@ func (t *PluginConfigResponseRewriteTester) ValidateInMeshNginxProxyAccess(witho
 	resp := t.nginxTunnel.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
 
 	if resp.Raw().StatusCode != http.StatusOK {
-		log.Infof("status code is %v, please check logs", resp.Raw().StatusCode)
+		log.Errorf("status code is %v, please check logs", resp.Raw().StatusCode)
 		assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
 	}
 	resp.Status(http.StatusOK)
