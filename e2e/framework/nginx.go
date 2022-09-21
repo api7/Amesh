@@ -99,10 +99,12 @@ type renderArgs struct {
 }
 
 func (f *Framework) CreateNginxOutsideMeshTo(svc string) string {
+	log.Infof("Create NGINX outside Mesh to " + svc)
 	return f.createNginxTo(svc, false)
 }
 
 func (f *Framework) CreateNginxInMeshTo(svc string) string {
+	log.Infof("Create NGINX in Mesh to " + svc)
 	return f.createNginxTo(svc, true)
 }
 
@@ -140,7 +142,7 @@ func (f *Framework) waitUntilAllNginxPodsReady(name string) error {
 			return false, err
 		}
 		if len(items) == 0 {
-			log.Infof("no nginx pods created")
+			log.Debugf("no nginx pods created")
 			return false, nil
 		}
 		for _, pod := range items {

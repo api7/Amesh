@@ -18,8 +18,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/api7/gopkg/pkg/log"
+	"github.com/fatih/color"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/onsi/ginkgo/v2"
@@ -140,10 +142,7 @@ func NewFramework(opts *Options) *Framework {
 }
 
 func (f *Framework) cpNamespace() string {
-	//return f.namespace + "-cp"
-
-	// TODO: FIXME currently our dynamic lib use hard-coded istio-system
-	return "istio-system"
+	return f.namespace + "-cp"
 }
 
 func (f *Framework) deploy() {
@@ -158,7 +157,12 @@ func (f *Framework) deploy() {
 }
 
 func (f *Framework) beforeEach() {
+	log.Infof(color.CyanString("=== Environment Initializing ==="))
+	defer LogTimeTrack(time.Now(), "=== Environment Initialized (%v) ===")
+
+	log.Infof("creating namespace " + f.namespace)
 	f.WaitForNamespaceDeletion(f.namespace)
+	log.Infof("creating namespace " + f.cpNamespace())
 	f.WaitForNamespaceDeletion(f.cpNamespace())
 
 	err := k8s.CreateNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.namespace)
@@ -171,7 +175,8 @@ func (f *Framework) beforeEach() {
 }
 
 func (f *Framework) afterEach() {
-	log.Infof("cleanup...")
+	log.Infof(color.CyanString("=== Environment Cleaning ==="))
+	defer LogTimeTrack(time.Now(), "=== Environment Cleaned (%v) ===")
 
 	err := k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.namespace)
 	assert.Nil(ginkgo.GinkgoT(), err, "delete namespace "+f.namespace)

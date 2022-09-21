@@ -52,6 +52,12 @@ func (f *Framework) CreateResourceFromString(res string) error {
 	return k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, res)
 }
 
+// CreateResourceFromString creates a Kubernetes resource from the given manifest.
+func (f *Framework) DeleteResourceFromString(res, name string) error {
+	_, err := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "delete", res, name)
+	return err
+}
+
 func (f *Framework) WaitForNamespaceDeletion(namespace string) {
 	ns, err := k8s.GetNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, namespace)
 
@@ -69,7 +75,7 @@ func (f *Framework) WaitForNamespaceDeletion(namespace string) {
 						return false, err
 					}
 				}
-				log.Infof("namespace %s is deleting, waiting...", namespace)
+				log.Debugf("namespace %s is deleting, waiting...", namespace)
 				return false, nil
 			}
 			err = waitExponentialBackoff(condFunc)

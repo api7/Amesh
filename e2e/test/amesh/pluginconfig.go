@@ -10,6 +10,7 @@ import (
 	"github.com/gavv/httpexpect/v2"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 
 	"github.com/api7/amesh/e2e/framework"
 )
@@ -62,6 +63,12 @@ spec:
 	assert.Nil(ginkgo.GinkgoT(), err, "create AmeshPluginConfig")
 
 	time.Sleep(time.Second * 4)
+
+	log.Infow("update config",
+		zap.Any("body", t.Body),
+		zap.Any("headers", t.Headers),
+		zap.Any("deleted_headers", t.deletedHeaders),
+	)
 }
 
 func (t *PluginConfigResponseRewriteTester) initNginxTunnel() {
@@ -104,12 +111,31 @@ func (t *PluginConfigResponseRewriteTester) UpdateConfig(conf *ResponseRewriteCo
 	t.applyAmeshPluginConfig()
 }
 
+func (t *PluginConfigResponseRewriteTester) DeleteAmeshPluginConfig() {
+	t.Body = ""
+	t.deletedHeaders = map[string]struct{}{}
+	for key, _ := range t.Headers {
+		t.deletedHeaders[key] = struct{}{}
+	}
+	t.Headers = map[string]string{}
+
+	err := t.f.DeleteResourceFromString("ampc", "ampc-sample")
+	assert.Nil(ginkgo.GinkgoT(), err, "delete AmeshPluginConfig")
+
+	log.Infow("delete config",
+		zap.Any("deleted_headers", t.deletedHeaders),
+	)
+
+	time.Sleep(time.Second * 4)
+}
+
 func (t *PluginConfigResponseRewriteTester) ValidateInMeshNginxProxyAccess(withoutHeaders ...string) {
 	f := t.f
 	t.initNginxTunnel()
 
 	resp := t.nginxTunnel.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
 
+	log.Debugw("resp", zap.Any("headers", resp.Raw().Header), zap.Any("body", resp.Body().Raw()))
 	if resp.Raw().StatusCode != http.StatusOK {
 		log.Errorf("status code is %v, please check logs", resp.Raw().StatusCode)
 		assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
@@ -118,18 +144,22 @@ func (t *PluginConfigResponseRewriteTester) ValidateInMeshNginxProxyAccess(witho
 	resp.Headers().Value("Via").Array().Contains("APISIX")
 
 	for headerKey, headerValue := range t.Headers {
+		log.Infof("validating header exists: " + headerKey)
 		resp.Headers().Value(headerKey).Array().Contains(headerValue)
 	}
 
 	for header, _ := range t.deletedHeaders {
+		log.Infof("validating header doesn't exist: " + header)
 		resp.Headers().NotContainsKey(header)
 	}
 
 	for _, header := range withoutHeaders {
+		log.Infof("validating header doesn't exist: " + header)
 		resp.Headers().NotContainsKey(header)
 	}
 
 	if t.Body != "" {
+		log.Infof("validating body")
 		resp.Body().Equal(t.Body)
 	}
 }
@@ -160,7 +190,7 @@ func (t *PluginConfigResponseRewriteTester) ValidateInMeshCurlAccess(withoutHead
 var _ = ginkgo.Describe("[amesh-controller functions]", func() {
 	f := framework.NewDefaultFramework()
 
-	ginkgo.It("should be able to inject plugins", func() {
+	framework.Case("should be able to inject plugins", func() {
 		t := NewTester(f, &ResponseRewriteConfig{
 			Body: "BODY_REWRITE",
 			Headers: map[string]string{
@@ -173,7 +203,7 @@ var _ = ginkgo.Describe("[amesh-controller functions]", func() {
 		t.ValidateInMeshCurlAccess()
 	})
 
-	ginkgo.It("should be able to update plugins", func() {
+	framework.Case("should be able to update plugins", func() {
 		t := NewTester(f, &ResponseRewriteConfig{
 			Headers: map[string]string{
 				"X-Header": "Rewrite",
@@ -201,5 +231,20 @@ var _ = ginkgo.Describe("[amesh-controller functions]", func() {
 		})
 		t.ValidateInMeshNginxProxyAccess()
 		t.ValidateInMeshCurlAccess()
+	})
+	framework.Case("should be able to delete plugins", func() {
+		t := NewTester(f, &ResponseRewriteConfig{
+			Headers: map[string]string{
+				"X-Header": "Rewrite",
+			},
+			Body: "REWRITE",
+		})
+
+		t.Create()
+		t.ValidateInMeshNginxProxyAccess()
+
+		t.DeleteAmeshPluginConfig()
+		t.ValidateInMeshNginxProxyAccess()
+
 	})
 })

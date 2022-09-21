@@ -5,7 +5,8 @@ go 1.18
 replace github.com/api7/amesh => ../
 
 require (
-	github.com/api7/gopkg v0.1.2
+	github.com/api7/gopkg v0.1.3
+	github.com/fatih/color v1.13.0
 	github.com/gavv/httpexpect/v2 v2.3.1
 	github.com/gruntwork-io/terratest v0.40.19
 	github.com/onsi/ginkgo/v2 v2.1.4
@@ -46,6 +47,8 @@ require (
 	github.com/json-iterator/go v1.1.11 // indirect
 	github.com/klauspost/compress v1.13.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/mattn/go-colorable v0.1.9 // indirect
+	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/mattn/go-zglob v0.0.2-0.20190814121620-e3c945676326 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

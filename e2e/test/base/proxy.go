@@ -28,7 +28,7 @@ import (
 var _ = ginkgo.Describe("[basic proxy functions]", func() {
 	f := framework.NewDefaultFramework()
 
-	ginkgo.It("should be able to proxy outside mesh", func() {
+	framework.Case("should be able to proxy outside mesh", func() {
 		_ = f
 
 		name := f.CreateNginxOutsideMeshTo(f.GetHttpBinServiceFQDN())
@@ -47,7 +47,7 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		resp.Body().Contains("origin")
 	})
 
-	ginkgo.It("should be able to proxy inside mesh", func() {
+	framework.Case("should be able to proxy inside mesh", func() {
 		_ = f
 
 		name := f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN())

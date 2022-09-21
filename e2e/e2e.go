@@ -16,6 +16,7 @@ package e2e
 
 import (
 	"github.com/api7/gopkg/pkg/log"
+	"github.com/fatih/color"
 	terratestlogger "github.com/gruntwork-io/terratest/modules/logger"
 
 	_ "github.com/api7/amesh/e2e/test/amesh"
@@ -35,4 +36,6 @@ func runE2E() {
 	terratestlogger.Default = terratestlogger.Discard
 	terratestlogger.Terratest = terratestlogger.Discard
 	terratestlogger.Global = terratestlogger.Discard
+
+	color.NoColor = false
 }

@@ -71,6 +71,8 @@ spec:
 func (f *Framework) newHttpBin() {
 	artifact, err := RenderManifest(_httpbinManifest, f.args)
 	assert.Nil(ginkgo.GinkgoT(), err, "render httpbin template")
+
+	log.Infof("creating httpbin")
 	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
 	assert.Nil(ginkgo.GinkgoT(), err, "apply httpbin")
 
@@ -82,13 +84,13 @@ func (f *Framework) waitUntilAllHttpBinPodsReady() error {
 		LabelSelector: "app=httpbin",
 	}
 	condFunc := func() (bool, error) {
-		log.Infof("waiting httpbin pods...")
+		log.Debugf("waiting httpbin pods...")
 		items, err := k8s.ListPodsE(ginkgo.GinkgoT(), f.kubectlOpts, opts)
 		if err != nil {
 			return false, err
 		}
 		if len(items) == 0 {
-			log.Infof("no httpbin pods created")
+			log.Debugf("no httpbin pods created")
 			clientset, err := k8s.GetKubernetesClientFromOptionsE(ginkgo.GinkgoT(), f.kubectlOpts)
 			if err != nil {
 				return false, err
@@ -99,7 +101,7 @@ func (f *Framework) waitUntilAllHttpBinPodsReady() error {
 				return false, err
 			}
 			if len(deployments.Items) == 0 {
-				log.Infof("no httpbin deployment created")
+				log.Debugf("no httpbin deployment created")
 				return false, nil
 			}
 			for _, deployment := range deployments.Items {

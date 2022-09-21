@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strings"
 )
 
 const (
@@ -27,18 +28,21 @@ spec:
 )
 
 func (f *Framework) CreateCurl() {
+	log.Infof("Create in Mesh Curl")
 
 	artifact, err := RenderManifest(curlPod, f.args)
 	assert.Nil(ginkgo.GinkgoT(), err, "render curl template")
 	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
 	assert.Nil(ginkgo.GinkgoT(), err, "apply curl pod")
 
-	assert.Nil(ginkgo.GinkgoT(), f.waitUntilAllCurlPodsReady("consumer"), "wait for nginx ready")
+	assert.Nil(ginkgo.GinkgoT(), f.waitUntilAllCurlPodsReady("consumer"), "wait for curl ready")
 
 	return
 }
 
 func (f *Framework) Curl(args ...string) string {
+	log.Infof("Executing: curl -s -i " + strings.Join(args, " "))
+
 	cmd := []string{"exec", "consumer", "-c", "istio-proxy", "--", "curl", "-s", "-i"}
 	cmd = append(cmd, args...)
 	output, err := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, cmd...)
@@ -61,7 +65,7 @@ func (f *Framework) waitUntilAllCurlPodsReady(name string) error {
 			return false, err
 		}
 		if len(items) == 0 {
-			log.Errorw("no consumer pods created")
+			log.Debugf("no consumer pods created")
 			return false, nil
 		}
 		for _, pod := range items {

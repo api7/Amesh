@@ -23,6 +23,9 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/api7/gopkg/pkg/log"
+	"github.com/fatih/color"
+	"github.com/onsi/ginkgo/v2"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -70,4 +73,42 @@ func GetKubeConfig() string {
 
 func randomNamespace() string {
 	return fmt.Sprintf("amesh-e2e-%d", time.Now().Nanosecond())
+}
+
+func TimeTrack(started time.Time, handler func(duration time.Duration)) {
+	elapsed := time.Since(started)
+	handler(elapsed)
+}
+
+func LogTimeElapsed(format string) func(duration time.Duration) {
+	return func(duration time.Duration) {
+		log.SkipFramesOnce(1).Infof(color.CyanString(format, duration))
+	}
+}
+
+func LogTimeTrack(started time.Time, format string) {
+	log.SkipFramesOnce(1)
+	TimeTrack(started, LogTimeElapsed(format))
+}
+
+func caseWrapper(name string, f func()) func() {
+	return func() {
+		log.SkipFramesOnce(99) // Skip more frames to ignore file name
+		log.Infof(color.GreenString(fmt.Sprintf("=== CASE: %s ===", name)))
+		started := time.Now()
+		defer func() {
+			log.SkipFramesOnce(99)
+			log.Infof(color.GreenString(fmt.Sprintf("=== CaseEnd: %v ===", time.Since(started))))
+		}()
+
+		f()
+	}
+}
+
+func Case(name string, f func()) {
+	ginkgo.It(name, caseWrapper(name, f))
+}
+
+func FCase(name string, f func()) {
+	ginkgo.FIt(name, caseWrapper(name, f))
 }
