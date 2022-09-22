@@ -46,9 +46,9 @@ func RenderManifest(manifest string, data any) (string, error) {
 
 func WaitExponentialBackoff(condFunc func() (bool, error)) error {
 	backoff := wait.Backoff{
-		Duration: 500 * time.Millisecond,
+		Duration: time.Second,
 		Factor:   1,
-		Steps:    20,
+		Steps:    30,
 	}
 	return wait.ExponentialBackoff(backoff, condFunc)
 }

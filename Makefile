@@ -109,7 +109,7 @@ e2e-test:
 	AMESH_E2E_HOME=$(shell pwd)/e2e \
 		cd e2e && \
 		go env -w GOFLAGS="-mod=mod" && \
-		ginkgo -cover -coverprofile=coverage.txt -r --randomizeSuites --randomizeAllSpecs --trace -p --nodes=$(E2E_CONCURRENCY)
+		ginkgo -cover -coverprofile=coverage.txt -r --randomize-suites --randomize-all --trace -p --nodes=$(E2E_CONCURRENCY)
 
 .PHONY verify-license:
 verify-license:

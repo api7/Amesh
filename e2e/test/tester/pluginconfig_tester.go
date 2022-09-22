@@ -75,7 +75,7 @@ spec:
 	err = t.f.CreateResourceFromString(fmt.Sprintf(ampc, conf))
 	assert.Nil(ginkgo.GinkgoT(), err, "create AmeshPluginConfig")
 
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second * 18)
 
 	t.logger.SkipFramesOnce(1).Infow("update config",
 		zap.Any("body", t.Body),

@@ -148,7 +148,7 @@ func (f *Framework) WaitForDeploymentPodsReady(name string) error {
 		}
 		if len(items) == 0 {
 			if deploymentFailures >= failureToleration {
-				log.Warnf("no %s pods created (%v times)", name, failureToleration)
+				log.Warnf("no %s pods created (%v times)", name, deploymentFailures)
 			} else {
 				log.Debugf("no %s pods created", name)
 			}
