@@ -25,8 +25,8 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/api7/amesh/e2e/framework/utils"
 )
 
 const (
@@ -98,17 +98,17 @@ type renderArgs struct {
 	InMesh    bool
 }
 
-func (f *Framework) CreateNginxOutsideMeshTo(svc string) string {
+func (f *Framework) CreateNginxOutsideMeshTo(svc string, waitReady bool) string {
 	log.Infof("Create NGINX outside Mesh to " + svc)
-	return f.createNginxTo(svc, false)
+	return f.createNginxTo(svc, false, waitReady)
 }
 
-func (f *Framework) CreateNginxInMeshTo(svc string) string {
+func (f *Framework) CreateNginxInMeshTo(svc string, waitReady bool) string {
 	log.Infof("Create NGINX in Mesh to " + svc)
-	return f.createNginxTo(svc, true)
+	return f.createNginxTo(svc, true, waitReady)
 }
 
-func (f *Framework) createNginxTo(svc string, inMesh bool) string {
+func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) string {
 
 	conf := fmt.Sprintf(nginxConfTemplate, svc, svc)
 
@@ -122,47 +122,25 @@ func (f *Framework) createNginxTo(svc string, inMesh bool) string {
 		ConfigMap:    randomName,
 		InMesh:       inMesh,
 	}
-	artifact, err := RenderManifest(nginxTemplate, args)
+	artifact, err := utils.RenderManifest(nginxTemplate, args)
 	assert.Nil(ginkgo.GinkgoT(), err, "render nginx template")
 	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
+	if err != nil {
+		log.Errorf("failed to apply nginx pod: %s", err.Error())
+	}
 	assert.Nil(ginkgo.GinkgoT(), err, "apply nginx")
 
-	assert.Nil(ginkgo.GinkgoT(), f.waitUntilAllNginxPodsReady(randomName), "wait for nginx ready")
+	if waitReady {
+		f.WaitForNginxReady(randomName)
+	}
 
 	return randomName
 }
 
-func (f *Framework) waitUntilAllNginxPodsReady(name string) error {
-	opts := metav1.ListOptions{
-		LabelSelector: "app=" + name,
-	}
-	condFunc := func() (bool, error) {
-		items, err := k8s.ListPodsE(ginkgo.GinkgoT(), f.kubectlOpts, opts)
-		if err != nil {
-			return false, err
-		}
-		if len(items) == 0 {
-			log.Debugf("no nginx pods created")
-			return false, nil
-		}
-		for _, pod := range items {
-			found := false
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type != corev1.PodReady {
-					continue
-				}
-				found = true
-				if cond.Status != corev1.ConditionTrue {
-					return false, nil
-				}
-			}
-			if !found {
-				return false, nil
-			}
-		}
-		return true, nil
-	}
-	return waitExponentialBackoff(condFunc)
+func (f *Framework) WaitForNginxReady(name string) {
+	log.Infof("wait for nginx ready")
+	defer utils.LogTimeTrack(time.Now(), "nginx ready (%v)")
+	assert.Nil(ginkgo.GinkgoT(), f.WaitForPodsReady(name), "wait for nginx ready")
 }
 
 // NewHTTPClientToNginx creates a http client which sends requests to

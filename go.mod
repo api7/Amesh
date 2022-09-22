@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/api7/amesh/api/proto v0.0.0-00010101000000-000000000000
 	github.com/api7/amesh/controller v0.0.0-00010101000000-000000000000
-	github.com/api7/gopkg v0.1.3
+	github.com/api7/gopkg v0.1.4
 	github.com/envoyproxy/go-control-plane v0.10.1
 	github.com/golang/protobuf v1.5.2
 	github.com/google/uuid v1.2.0

@@ -15,15 +15,15 @@
 package framework
 
 import (
-	"context"
 	"fmt"
+	"time"
 
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/api7/amesh/e2e/framework/utils"
 )
 
 const (
@@ -69,69 +69,29 @@ spec:
 )
 
 func (f *Framework) newHttpBin() {
-	artifact, err := RenderManifest(_httpbinManifest, f.args)
+	artifact, err := utils.RenderManifest(_httpbinManifest, f.args)
 	assert.Nil(ginkgo.GinkgoT(), err, "render httpbin template")
 
 	log.Infof("creating httpbin")
 	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
 	assert.Nil(ginkgo.GinkgoT(), err, "apply httpbin")
-
-	assert.Nil(ginkgo.GinkgoT(), f.waitUntilAllHttpBinPodsReady(), "wait for httpbin ready")
+	f.httpbinReady = false
 }
 
-func (f *Framework) waitUntilAllHttpBinPodsReady() error {
-	opts := metav1.ListOptions{
-		LabelSelector: "app=httpbin",
+func (f *Framework) waitForHttpbinReady() {
+	if f.httpbinReady {
+		return
 	}
-	condFunc := func() (bool, error) {
-		log.Debugf("waiting httpbin pods...")
-		items, err := k8s.ListPodsE(ginkgo.GinkgoT(), f.kubectlOpts, opts)
-		if err != nil {
-			return false, err
-		}
-		if len(items) == 0 {
-			log.Debugf("no httpbin pods created")
-			clientset, err := k8s.GetKubernetesClientFromOptionsE(ginkgo.GinkgoT(), f.kubectlOpts)
-			if err != nil {
-				return false, err
-			}
 
-			deployments, err := clientset.AppsV1().Deployments(f.kubectlOpts.Namespace).List(context.Background(), opts)
-			if err != nil {
-				return false, err
-			}
-			if len(deployments.Items) == 0 {
-				log.Debugf("no httpbin deployment created")
-				return false, nil
-			}
-			for _, deployment := range deployments.Items {
-				for _, cond := range deployment.Status.Conditions {
-					log.Debugf("deployment %v: %v", deployment.Name, cond.String())
-				}
-			}
-			return false, nil
-		}
-		for _, pod := range items {
-			found := false
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type != corev1.PodReady {
-					continue
-				}
-				found = true
-				if cond.Status != corev1.ConditionTrue {
-					return false, nil
-				}
-			}
-			if !found {
-				return false, nil
-			}
-		}
-		return true, nil
-	}
-	return waitExponentialBackoff(condFunc)
+	log.Infof("wait for httpbin ready")
+	defer utils.LogTimeTrack(time.Now(), "httpbin ready (%v)")
+	assert.Nil(ginkgo.GinkgoT(), f.WaitForDeploymentPodsReady("httpbin"), "wait for httpbin ready")
+	f.httpbinReady = true
 }
 
 // GetHttpBinServiceFQDN returns the FQDN description for HttpBin service.
 func (f *Framework) GetHttpBinServiceFQDN() string {
+	f.waitForHttpbinReady()
+
 	return fmt.Sprintf("httpbin.%s.svc.cluster.local", f.namespace)
 }

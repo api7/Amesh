@@ -17,7 +17,6 @@ package framework
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/api7/gopkg/pkg/log"
@@ -27,9 +26,11 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/api7/amesh/e2e/framework/ameshcontroller"
 	"github.com/api7/amesh/e2e/framework/controlplane"
+	"github.com/api7/amesh/e2e/framework/utils"
 )
 
 func init() {
@@ -47,6 +48,8 @@ type Framework struct {
 	opts *Options
 	args *ManifestArgs
 
+	e2eHome string
+
 	t           testing.TestingT
 	kubectlOpts *k8s.KubectlOptions
 	tunnels     []*k8s.Tunnel
@@ -54,6 +57,8 @@ type Framework struct {
 	cp        controlplane.ControlPlane
 	amesh     ameshcontroller.AmeshController
 	namespace string
+
+	httpbinReady bool
 }
 
 type Options struct {
@@ -75,7 +80,7 @@ func NewFramework(opts *Options) *Framework {
 	e2eHome := os.Getenv("AMESH_E2E_HOME")
 
 	if opts.KubeConfig == "" {
-		opts.KubeConfig = GetKubeConfig()
+		opts.KubeConfig = utils.GetKubeConfig()
 	}
 	if opts.ControlPlaneImage == "" {
 		opts.ControlPlaneImage = "istio/pilot:1.13.1"
@@ -108,11 +113,30 @@ func NewFramework(opts *Options) *Framework {
 		opts: opts,
 		args: args,
 
+		e2eHome: e2eHome,
+
 		t:         ginkgo.GinkgoT(),
-		namespace: randomNamespace(),
+		namespace: utils.RandomNamespace(),
 	}
 	f.kubectlOpts = &k8s.KubectlOptions{
 		ConfigPath: opts.KubeConfig,
+		Namespace:  f.namespace,
+	}
+
+	ginkgo.BeforeEach(f.beforeEach)
+	ginkgo.AfterEach(f.afterEach)
+
+	return f
+}
+
+func (f *Framework) cpNamespace() string {
+	return f.namespace + "-cp"
+}
+
+func (f *Framework) initFramework() {
+	f.namespace = utils.RandomNamespace()
+	f.kubectlOpts = &k8s.KubectlOptions{
+		ConfigPath: f.kubectlOpts.ConfigPath,
 		Namespace:  f.namespace,
 	}
 
@@ -131,65 +155,114 @@ func NewFramework(opts *Options) *Framework {
 		KubeConfig:  f.opts.KubeConfig,
 		Namespace:   f.cpNamespace(),
 		KubectlOpts: f.kubectlOpts,
-		AmeshImage:  f.args.LocalRegistry + "/" + opts.AmeshControllerImage,
-		ChartsPath:  filepath.Join(e2eHome, "../controller/charts/amesh-controller"),
+		AmeshImage:  f.args.LocalRegistry + "/" + f.opts.AmeshControllerImage,
+		ChartsPath:  filepath.Join(f.e2eHome, "../controller/charts/amesh-controller"),
 	})
-
-	ginkgo.BeforeEach(f.beforeEach)
-	ginkgo.AfterEach(f.afterEach)
-
-	return f
-}
-
-func (f *Framework) cpNamespace() string {
-	return f.namespace + "-cp"
 }
 
 func (f *Framework) deploy() {
-	log.Infof("installing istio")
-	assert.Nil(ginkgo.GinkgoT(), f.cp.Deploy(), "deploy istio")
-	assert.Nil(ginkgo.GinkgoT(), f.cp.InjectNamespace(f.namespace), "inject namespace")
+	log.Infof(color.CyanString("=== Installing ==="))
+	defer utils.LogTimeTrack(time.Now(), "=== Installation Available (%v) ===")
 
-	log.Infof("installing amesh-controller")
-	assert.Nil(ginkgo.GinkgoT(), f.amesh.Deploy(), "deploy amesh-controller")
-
-	f.newHttpBin()
+	e := utils.NewParallelExecutor("")
+	e.Add(func() {
+		log.Infof("installing istio")
+		defer utils.LogTimeTrack(time.Now(), "istio installed (%v)")
+		assert.Nil(ginkgo.GinkgoT(), f.cp.Deploy(), "deploy istio")
+	}, func() {
+		log.Infof("wait for istio ready")
+		defer utils.LogTimeTrack(time.Now(), "istio ready (%v)")
+		assert.Nil(ginkgo.GinkgoT(), f.cp.WaitForReady(), "wait istio")
+	}, func() {
+		f.newHttpBin()
+		f.waitForHttpbinReady()
+	})
+	e.Add(func() {
+		log.Infof("installing amesh-controller")
+		defer utils.LogTimeTrack(time.Now(), "amesh-controller installed (%v)")
+		assert.Nil(ginkgo.GinkgoT(), f.amesh.Deploy(), "deploy amesh-controller")
+	}, func() {
+		log.Infof("wait for amesh-controller ready")
+		defer utils.LogTimeTrack(time.Now(), "amesh-controller ready (%v)")
+		assert.Nil(ginkgo.GinkgoT(), f.amesh.WaitForReady(), "wait amesh-controller")
+	})
+	e.Wait()
 }
 
 func (f *Framework) beforeEach() {
 	log.Infof(color.CyanString("=== Environment Initializing ==="))
-	defer LogTimeTrack(time.Now(), "=== Environment Initialized (%v) ===")
+	defer utils.LogTimeTrack(time.Now(), "=== Environment Initialized (%v) ===")
 
-	log.Infof("creating namespace " + f.namespace)
-	f.WaitForNamespaceDeletion(f.namespace)
-	log.Infof("creating namespace " + f.cpNamespace())
-	f.WaitForNamespaceDeletion(f.cpNamespace())
+	f.initFramework()
 
-	err := k8s.CreateNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.namespace)
-	assert.Nil(ginkgo.GinkgoT(), err, "create namespace "+f.namespace)
-	err = k8s.CreateNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace())
-	if err != nil && !strings.Contains(err.Error(), "already exists") {
+	e := utils.NewParallelExecutor("")
+	e.Add(func() {
+		log.Infof("creating namespace " + f.namespace)
+		defer log.Infof("created namespace " + f.namespace)
+		f.WaitForNamespaceDeletion(f.namespace)
+
+		err := k8s.CreateNamespaceWithMetadataE(ginkgo.GinkgoT(), f.kubectlOpts, metav1.ObjectMeta{
+			Name: f.namespace,
+			Labels: map[string]string{
+				"istio-injection": "enabled",
+			},
+		})
+		assert.Nil(ginkgo.GinkgoT(), err, "create namespace "+f.namespace)
+
+		//assert.Nil(ginkgo.GinkgoT(), f.cp.InjectNamespace(f.namespace), "inject namespace")
+	})
+	e.Add(func() {
+		log.Infof("creating namespace " + f.cpNamespace())
+		defer log.Infof("created namespace " + f.cpNamespace())
+		f.WaitForNamespaceDeletion(f.cpNamespace())
+
+		err := k8s.CreateNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace())
 		assert.Nil(ginkgo.GinkgoT(), err, "create namespace "+f.cpNamespace())
-	}
+	})
+	e.Wait()
+
 	f.deploy()
 }
 
 func (f *Framework) afterEach() {
 	log.Infof(color.CyanString("=== Environment Cleaning ==="))
-	defer LogTimeTrack(time.Now(), "=== Environment Cleaned (%v) ===")
+	//started := time.Now()
+	// TODO: this sometimes appears after the [SLOW TEST] mark, don't know why
+	defer utils.LogTimeTrack(time.Now(), "=== Environment Cleaned (%v) ===")
 
-	err := k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.namespace)
-	assert.Nil(ginkgo.GinkgoT(), err, "delete namespace "+f.namespace)
+	defer func() {
+		log.Infof("delete namespace " + f.cpNamespace())
+		assert.Nil(ginkgo.GinkgoT(), k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace()), "delete namespace "+f.cpNamespace())
 
+		//utils.LogTimeTrack(started, "=== Environment Cleaned (%v) ===")
+	}()
 	// Should delete the control plane components explicitly since there are some cluster scoped
 	// resources, which will be intact if we just only delete the cp namespace.
 
-	assert.Nil(ginkgo.GinkgoT(), f.cp.Uninstall(), "uninstall istio")
-	assert.Nil(ginkgo.GinkgoT(), f.amesh.Uninstall(), "uninstall amesh-controller")
-	assert.Nil(ginkgo.GinkgoT(), k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace()), "delete namespace "+f.cpNamespace())
+	e := utils.NewParallelExecutor("")
+	e.Add(func() {
+		log.Infof("delete namespace " + f.namespace)
+		assert.Nil(ginkgo.GinkgoT(), k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.namespace), "delete namespace "+f.namespace)
+	})
+	e.Add(func() {
+		utils.IgnorePanic(func() {
+			log.Infof("delete istio")
+			// FIXME: make sure we handle cluster-range resource correctly since users may interrupt when deleting
+			assert.Nil(ginkgo.GinkgoT(), f.cp.Uninstall(), "uninstall istio")
+		})
+	})
+	e.Add(func() {
+		utils.IgnorePanic(func() {
+			log.Infof("delete amesh-controller")
+			assert.Nil(ginkgo.GinkgoT(), f.amesh.Uninstall(), "uninstall amesh-controller")
+		})
+	})
+	e.Add(func() {
+		for _, tunnel := range f.tunnels {
+			tunnel.Close()
+		}
+		f.tunnels = nil
+	})
 
-	for _, tunnel := range f.tunnels {
-		tunnel.Close()
-	}
-	f.tunnels = nil
+	e.Wait()
 }

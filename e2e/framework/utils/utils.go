@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package framework
+package utils
 
 import (
 	"fmt"
@@ -25,7 +25,9 @@ import (
 
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/fatih/color"
+	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -42,13 +44,40 @@ func RenderManifest(manifest string, data any) (string, error) {
 	return artifact.String(), nil
 }
 
-func waitExponentialBackoff(condFunc func() (bool, error)) error {
+func WaitExponentialBackoff(condFunc func() (bool, error)) error {
 	backoff := wait.Backoff{
 		Duration: 500 * time.Millisecond,
-		Factor:   2,
-		Steps:    8,
+		Factor:   1,
+		Steps:    20,
 	}
 	return wait.ExponentialBackoff(backoff, condFunc)
+}
+
+func WaitForServiceReady(kubectlOpts *k8s.KubectlOptions, ns, name string) (string, error) {
+	var (
+		svc *corev1.Service
+		err error
+	)
+
+	condFunc := func() (bool, error) {
+		svc, err = k8s.GetServiceE(ginkgo.GinkgoT(), &k8s.KubectlOptions{
+			ContextName:   kubectlOpts.ContextName,
+			ConfigPath:    kubectlOpts.ConfigPath,
+			Namespace:     ns,
+			Env:           kubectlOpts.Env,
+			InClusterAuth: kubectlOpts.InClusterAuth,
+		}, name)
+		if err != nil {
+			return false, err
+		}
+		return k8s.IsServiceAvailable(svc), nil
+	}
+
+	if err := wait.PollImmediate(1*time.Second, 15*time.Second, condFunc); err != nil {
+		return "", err
+	}
+
+	return svc.Spec.ClusterIP, nil
 }
 
 // GetKubeConfig returns the kubeconfig file path.
@@ -71,7 +100,7 @@ func GetKubeConfig() string {
 	return kubeConfig
 }
 
-func randomNamespace() string {
+func RandomNamespace() string {
 	return fmt.Sprintf("amesh-e2e-%d", time.Now().Nanosecond())
 }
 
@@ -91,6 +120,11 @@ func LogTimeTrack(started time.Time, format string) {
 	TimeTrack(started, LogTimeElapsed(format))
 }
 
+func LogTimeTrackSkipFrames(started time.Time, format string, frames int) {
+	log.SkipFramesOnce(1 + frames)
+	TimeTrack(started, LogTimeElapsed(format))
+}
+
 func caseWrapper(name string, f func()) func() {
 	return func() {
 		log.SkipFramesOnce(99) // Skip more frames to ignore file name
@@ -106,9 +140,24 @@ func caseWrapper(name string, f func()) func() {
 }
 
 func Case(name string, f func()) {
-	ginkgo.It(name, caseWrapper(name, f))
+	ginkgo.It(name, caseWrapper(name, f), ginkgo.Offset(1))
 }
 
 func FCase(name string, f func()) {
-	ginkgo.FIt(name, caseWrapper(name, f))
+	ginkgo.FIt(name, caseWrapper(name, f), ginkgo.Offset(1))
+}
+
+func IgnorePanic(f func()) {
+	defer ginkgo.GinkgoRecover()
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		//err, ok := r.(error)
+		//if ok {
+		//	log.Errorf("ERROR: %s", err.Error())
+		//}
+	}()
+	f()
 }

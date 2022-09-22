@@ -23,15 +23,16 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/api7/amesh/e2e/framework"
+	"github.com/api7/amesh/e2e/framework/utils"
 )
 
 var _ = ginkgo.Describe("[basic proxy functions]", func() {
 	f := framework.NewDefaultFramework()
 
-	framework.Case("should be able to proxy outside mesh", func() {
+	utils.Case("should be able to proxy outside mesh", func() {
 		_ = f
 
-		name := f.CreateNginxOutsideMeshTo(f.GetHttpBinServiceFQDN())
+		name := f.CreateNginxOutsideMeshTo(f.GetHttpBinServiceFQDN(), true)
 		tunnel := f.NewHTTPClientToNginx(name)
 
 		time.Sleep(time.Second * 8)
@@ -47,10 +48,11 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		resp.Body().Contains("origin")
 	})
 
-	framework.Case("should be able to proxy inside mesh", func() {
+	utils.Case("should be able to proxy inside mesh", func() {
 		_ = f
 
-		name := f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN())
+		name := f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(), true)
+
 		tunnel := f.NewHTTPClientToNginx(name)
 
 		time.Sleep(time.Second * 8)

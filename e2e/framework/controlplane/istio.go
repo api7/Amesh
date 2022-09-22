@@ -18,16 +18,15 @@ import (
 	"bytes"
 	"context"
 	"os/exec"
-	"time"
 
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
+
+	"github.com/api7/amesh/e2e/framework/utils"
 )
 
 var (
@@ -148,47 +147,36 @@ func (cp *istio) initCmd() {
 func (cp *istio) Deploy() error {
 	cp.initCmd()
 
-	err := cp.base.Run()
-	if err != nil {
-		log.Errorw("failed to run istio-base install command",
-			zap.String("command", cp.base.String()),
-			zap.Error(err),
-			zap.String("stderr", cp.baseStderr.String()),
-		)
-		return err
-	}
-	err = cp.discovery.Run()
-	if err != nil {
-		log.Errorw("failed to run istio-discovery install command",
-			zap.String("command", cp.discovery.String()),
-			zap.String("stderr", cp.discoveryStderr.String()),
-		)
-		return err
-	}
-
-	ctlOpts := &k8s.KubectlOptions{
-		ConfigPath: cp.options.KubeConfig,
-		Namespace:  cp.options.Namespace,
-	}
-
-	var (
-		svc *corev1.Service
-	)
-
-	condFunc := func() (bool, error) {
-		svc, err = k8s.GetServiceE(ginkgo.GinkgoT(), ctlOpts, "istiod")
+	e := utils.NewParallelExecutor("")
+	e.AddE(func() error {
+		err := cp.base.Run()
 		if err != nil {
-			return false, err
+			log.Errorf("failed to run istio-base install command: %s", cp.base.String())
+			log.Errorf("ERROR: %s", err.Error())
+			log.Errorf("STDERR: %s", cp.baseStderr.String())
+			return err
 		}
-		return k8s.IsServiceAvailable(svc), nil
-	}
+		return nil
+	})
+	e.AddE(func() error {
+		err := cp.discovery.Run()
+		if err != nil {
+			log.Errorw("failed to run istio-discovery install command",
+				zap.String("command", cp.discovery.String()),
+				zap.String("stderr", cp.discoveryStderr.String()),
+			)
+			return err
+		}
+		return nil
+	})
+	e.Wait()
+	return e.Errors()
+}
 
-	if err := wait.PollImmediate(3*time.Second, 15*time.Second, condFunc); err != nil {
-		return err
-	}
-
-	cp.clusterIP = svc.Spec.ClusterIP
-	return nil
+func (cp *istio) WaitForReady() error {
+	var err error
+	cp.clusterIP, err = utils.WaitForServiceReady(cp.options.KubectlOpts, cp.options.Namespace, "istiod")
+	return err
 }
 
 func (cp *istio) Uninstall() error {

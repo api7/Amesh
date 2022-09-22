@@ -17,15 +17,14 @@ package ameshcontroller
 import (
 	"bytes"
 	"os/exec"
-	"time"
 
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
+
+	"github.com/api7/amesh/e2e/framework/utils"
 )
 
 var (
@@ -40,6 +39,8 @@ type AmeshController interface {
 	Namespace() string
 	// Deploy deploys the amesh controller.
 	Deploy() error
+	// WaitForReady waits for amesh controller ready
+	WaitForReady() error
 	// Uninstall uninstalls the amesh controller.
 	Uninstall() error
 	// Addr returns the address to communicate with the amesh controller for fetching
@@ -132,36 +133,18 @@ func (cp *amesh) Deploy() error {
 
 	err := cp.install.Run()
 	if err != nil {
-		log.Errorw("failed to run amesh-controller install command",
-			zap.String("command", cp.install.String()),
-			zap.String("stderr", cp.installStderr.String()),
-		)
+		log.Errorf("failed to run amesh-controller install command: %s", cp.install.String())
+		log.Errorf("ERROR: %s", err.Error())
+		log.Errorf("STDERR: %s", cp.installStderr.String())
 		return err
 	}
-
-	ctlOpts := &k8s.KubectlOptions{
-		ConfigPath: cp.options.KubeConfig,
-		Namespace:  cp.options.Namespace,
-	}
-
-	var (
-		svc *corev1.Service
-	)
-
-	condFunc := func() (bool, error) {
-		svc, err = k8s.GetServiceE(ginkgo.GinkgoT(), ctlOpts, "amesh-controller")
-		if err != nil {
-			return false, err
-		}
-		return k8s.IsServiceAvailable(svc), nil
-	}
-
-	if err := wait.PollImmediate(3*time.Second, 15*time.Second, condFunc); err != nil {
-		return err
-	}
-
-	cp.clusterIP = svc.Spec.ClusterIP
 	return nil
+}
+
+func (cp *amesh) WaitForReady() error {
+	var err error
+	cp.clusterIP, err = utils.WaitForServiceReady(cp.options.KubectlOpts, cp.options.Namespace, "amesh-controller")
+	return err
 }
 
 func (cp *amesh) Uninstall() error {

@@ -5,7 +5,7 @@ go 1.18
 replace github.com/api7/amesh => ../
 
 require (
-	github.com/api7/gopkg v0.1.3
+	github.com/api7/gopkg v0.1.4
 	github.com/fatih/color v1.13.0
 	github.com/gavv/httpexpect/v2 v2.3.1
 	github.com/gruntwork-io/terratest v0.40.19

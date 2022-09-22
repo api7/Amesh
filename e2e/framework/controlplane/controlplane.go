@@ -25,6 +25,8 @@ type ControlPlane interface {
 	InjectNamespace(string) error
 	// Deploy deploys the control plane.
 	Deploy() error
+	// WaitForReady waits for control plane ready
+	WaitForReady() error
 	// Uninstall uninstalls the control plane.
 	Uninstall() error
 	// Addr returns the address to communicate with the control plane for fetching
