@@ -49,7 +49,7 @@ func WaitExponentialBackoff(condFunc func() (bool, error)) error {
 	backoff := wait.Backoff{
 		Duration: time.Second,
 		Factor:   1,
-		Steps:    30,
+		Steps:    60,
 	}
 	return wait.ExponentialBackoff(backoff, condFunc)
 }

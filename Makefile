@@ -15,6 +15,9 @@
 BINDIR ?= ./bin
 ENABLE_PROXY ?= false
 REGISTRY ?="localhost:5000"
+REQUIRE_REBUILD_IPTABLES_IMAGE ?= true
+REQUIRE_REBUILD_CONTROLLER_IMAGE ?= true
+
 export AMESH_STANDALONE_IMAGE ?= amesh-standalone
 export AMESH_STANDALONE_IMAGE_TAG ?= dev
 export AMESH_SIDECAR_IMAGE ?= amesh-sidecar
@@ -23,6 +26,8 @@ export AMESH_IPTABLES_IMAGE ?= amesh-iptables
 export AMESH_IPTABLES_IMAGE_TAG ?= dev
 export AMESH_SO_IMAGE ?= amesh-so
 export AMESH_SO_IMAGE_TAG ?= dev
+
+
 
 .PHONY: create-bin-dir
 create-bin-dir:
@@ -38,10 +43,16 @@ build-amesh-so: create-bin-dir
 
 .PHONY: build-amesh-iptables-image
 build-amesh-iptables-image:
-ifeq ($(ENABLE_PROXY), true)
-	@docker build -f Dockerfiles/iptables.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
+ifeq ($(REQUIRE_REBUILD_IPTABLES_IMAGE), true)
+	ifeq ($(ENABLE_PROXY), true)
+		@docker build -f Dockerfiles/iptables.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
+	else
+		@docker build -f Dockerfiles/iptables.Dockerfile -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
+	endif
 else
-	@docker build -f Dockerfiles/iptables.Dockerfile -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
+	# reuse pre-built image
+	docker pull api7/amesh-iptables:v0.0.2
+	docker tag api7/amesh-iptables:v0.0.2 $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG)
 endif
 
 .PHONY: build-amesh-standalone-image
@@ -76,8 +87,19 @@ build-amesh-sidecar-image: build-amesh-so-image
 		-f Dockerfiles/amesh-sidecar.Dockerfile \
 		-t $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) .
 
+.PHONY: build-amesh-controller-image
+build-amesh-controller-image:
+ifeq ($(REQUIRE_REBUILD_CONTROLLER_IMAGE), true)
+	cd controller && \
+	make docker-build
+else
+	# reuse pre-built image
+	docker pull api7/amesh-controller:latest
+endif
+	docker tag amesh-controller:latest $(REGISTRY)/amesh-controller:latest
+
 .PHONY: prepare-images
-prepare-images: build-amesh-iptables-image build-amesh-sidecar-image
+prepare-images: build-amesh-iptables-image build-amesh-controller-image build-amesh-sidecar-image
 	docker tag $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) $(REGISTRY)/$(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG)
 	docker tag $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) $(REGISTRY)/$(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG)
 
@@ -90,14 +112,19 @@ prepare-images: build-amesh-iptables-image build-amesh-sidecar-image
 	docker pull kennethreitz/httpbin
 	docker tag kennethreitz/httpbin $(REGISTRY)/kennethreitz/httpbin
 
+	docker pull curlimages/curl
+	docker tag curlimages/curl $(REGISTRY)/curlimages/curl
+
 .PHONY: push-images
 push-images:
 	docker push $(REGISTRY)/$(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG)
 	docker push $(REGISTRY)/$(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG)
+	docker push $(REGISTRY)/amesh-controller:latest
 
 	docker push $(REGISTRY)/istio/pilot:1.13.1
 	docker push $(REGISTRY)/nginx:1.19.3
 	docker push $(REGISTRY)/kennethreitz/httpbin
+	docker push $(REGISTRY)/curlimages/curl
 
 .PHONY: kind-up
 kind-up:

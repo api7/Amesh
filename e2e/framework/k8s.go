@@ -241,18 +241,23 @@ func (f *Framework) GetDeploymentLogs(ns, name string) string {
 	}
 
 	var buf strings.Builder
-	buf.WriteString(color.RedString("=== Dumping Deployment ==="))
+	buf.WriteString(color.RedString("=== Dumping Deployment ===\n"))
 	for _, pod := range pods.Items {
 		buf.WriteString(color.GreenString("=== Pod: %s ===\n", pod.Name))
-		logs, err := cli.CoreV1().RESTClient().Get().
-			Resource("pods").
-			Namespace(ns).
-			Name(pod.Name).SubResource("log").
-			Param("container", name).
-			Do(context.TODO()).
-			Raw()
-		if err == nil {
-			buf.Write(logs)
+		for _, container := range pod.Spec.Containers {
+			buf.WriteString(color.CyanString("=== Container: %s ===\n", container.Name))
+			logs, err := cli.CoreV1().RESTClient().Get().
+				Resource("pods").
+				Namespace(ns).
+				Name(pod.Name).SubResource("log").
+				Param("container", container.Name).
+				Do(context.TODO()).
+				Raw()
+			if err != nil {
+				buf.WriteString(color.RedString("Error: failed to retrieve logs: %s", err.Error()))
+			} else {
+				buf.Write(logs)
+			}
 		}
 		buf.WriteString(color.GreenString("\n=== Pod End ===\n"))
 	}

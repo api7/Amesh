@@ -146,30 +146,24 @@ func (cp *istio) initCmd() {
 func (cp *istio) Deploy() error {
 	cp.initCmd()
 
-	e := utils.NewParallelExecutor("")
-	e.AddE(func() error {
-		err := cp.base.Run()
-		if err != nil {
-			log.Errorf("failed to run istio-base install command: %s", cp.base.String())
-			log.Errorf("ERROR: %s", err.Error())
-			log.Errorf("STDERR: %s", cp.baseStderr.String())
-			return err
-		}
-		return nil
-	})
-	e.AddE(func() error {
-		err := cp.discovery.Run()
-		if err != nil {
-			log.Errorw("failed to run istio-discovery install command",
-				zap.String("command", cp.discovery.String()),
-				zap.String("stderr", cp.discoveryStderr.String()),
-			)
-			return err
-		}
-		return nil
-	})
-	e.Wait()
-	return e.Errors()
+	err := cp.base.Run()
+	if err != nil {
+		log.Errorf("failed to run istio-base install command")
+		log.Errorf("command: %s", cp.base.String())
+		log.Errorf("err: %s", err.Error())
+		log.Errorf("stderr: %s", cp.baseStderr.String())
+		return err
+	}
+
+	err = cp.discovery.Run()
+	if err != nil {
+		log.Errorf("failed to run istio-discovery install command")
+		log.Errorf("command: %s", cp.discovery.String())
+		log.Errorf("err: %s", err.Error())
+		log.Errorf("stderr: %s", cp.discoveryStderr.String())
+		return err
+	}
+	return nil
 }
 
 func (cp *istio) WaitForReady() error {

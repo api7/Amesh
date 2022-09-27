@@ -7,6 +7,11 @@ on:
   pull_request:
     branches:
       - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -33,10 +38,14 @@ jobs:
               - 'go.mod'
               - 'go.sum'
               - 'Makefile'
-              - 'Dockerfiles/'
+              - 'Dockerfiles/**'
               - '*.Dockerfile'
               - 'e2e/**'
               - 'scripts/**'
+            iptables:
+              - 'cmd/iptables/**'
+            controller:
+              - 'controller/**'
   e2e-test:
     runs-on: ubuntu-latest
     needs: changes
@@ -66,6 +75,10 @@ jobs:
           kubectl wait --for=condition=Ready nodes --all
 
       - name: Prepare Images
+        env:
+          REQUIRE_REBUILD_IPTABLES_IMAGE: ${{ needs.changes.outputs.iptables == 'true' }}
+          REQUIRE_REBUILD_CONTROLLER_IMAGE: ${{ needs.changes.outputs.controller == 'true' }}
+#          REQUIRE_REBUILD_SIDECAR_IMAGE: ${{ needs.changes.outputs.iptables == 'true' }}
         run: |
           make prepare-images
           make push-images

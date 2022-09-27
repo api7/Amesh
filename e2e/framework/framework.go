@@ -282,24 +282,44 @@ func (f *Framework) afterEach() {
 func (f *Framework) dumpNamespace() {
 	if ginkgo.CurrentSpecReport().Failed() {
 		if os.Getenv("E2E_ENV") == "ci" {
-			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("====== Dumping Namespace Contents ======"))
+			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("====== Dumping Namespace Contents ======\n"))
+
+			// Get
+			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Cluster Resources ==="))
 			output, _ := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "get", "deploy,sts,rs,svc,pods")
 			if output != "" {
-				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Cluster Resources ==="))
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
 
+			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "-n", f.cpNamespace(), "get", "deploy,sts,rs,svc,pods")
+			if output != "" {
+				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
+			}
+
+			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Amesh Resources ==="))
 			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "get", "ampc")
 			if output != "" {
-				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Amesh Resources ==="))
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
 
-			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "describe", "pods")
+			// Describe
+			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Describe Amesh Resources ==="))
+			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "describe", "ampc")
 			if output != "" {
-				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Describe Pods ==="))
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
+
+			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Describe Pods ==="))
+			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "-n", f.cpNamespace(), "describe", "pods")
+			if output != "" {
+				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
+			}
+			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "describe", "pods")
+			if output != "" {
+				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
+			}
+
+			// Logs
 			output = f.GetDeploymentLogs(f.cpNamespace(), "amesh-controller")
 			if output != "" {
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
