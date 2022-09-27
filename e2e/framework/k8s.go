@@ -16,9 +16,13 @@ package framework
 
 import (
 	"context"
+	"strings"
+
 	"github.com/api7/gopkg/pkg/log"
+	"github.com/fatih/color"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -220,4 +224,38 @@ func (f *Framework) WaitForAmeshPluginConfigEvents(name string, typ string, stat
 		return false, nil
 	}
 	return utils.WaitExponentialBackoff(condFunc)
+}
+
+func (f *Framework) GetDeploymentLogs(ns, name string) string {
+	cli, err := k8s.GetKubernetesClientFromOptionsE(f.t, f.kubectlOpts)
+	if err != nil {
+		assert.Nilf(ginkgo.GinkgoT(), err, "get client error: %s", err.Error())
+		return ""
+	}
+
+	pods, err := cli.CoreV1().Pods(ns).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: "app=" + name,
+	})
+	if err != nil {
+		return ""
+	}
+
+	var buf strings.Builder
+	buf.WriteString(color.RedString("=== Dumping Deployment ==="))
+	for _, pod := range pods.Items {
+		buf.WriteString(color.GreenString("=== Pod: %s ===\n", pod.Name))
+		logs, err := cli.CoreV1().RESTClient().Get().
+			Resource("pods").
+			Namespace(ns).
+			Name(pod.Name).SubResource("log").
+			Param("container", name).
+			Do(context.TODO()).
+			Raw()
+		if err == nil {
+			buf.Write(logs)
+		}
+		buf.WriteString(color.GreenString("\n=== Pod End ===\n"))
+	}
+	buf.WriteString(color.RedString("\n=== Deployment End ===\n"))
+	return buf.String()
 }

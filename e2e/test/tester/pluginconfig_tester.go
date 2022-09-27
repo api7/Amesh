@@ -3,7 +3,6 @@ package tester
 import (
 	"encoding/json"
 	"fmt"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"net/http"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	controllerutils "github.com/api7/amesh/controller/utils"
 	"github.com/api7/amesh/e2e/framework"
@@ -78,8 +78,9 @@ spec:
 	err = t.f.CreateResourceFromString(fmt.Sprintf(ampc, conf))
 	utils.AssertNil(err, "create AmeshPluginConfig")
 
+	// TODO: Check generation?
 	err = t.f.WaitForAmeshPluginConfigEvents("ampc-sample", controllerutils.ConditionSync, metav1.ConditionTrue)
-	utils.AssertNil(err, "wait for events")
+	utils.AssertNil(err, "wait for AmeshPluginConfig synchronization")
 
 	time.Sleep(time.Second * 10)
 

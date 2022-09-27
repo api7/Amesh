@@ -15,6 +15,7 @@
 package framework
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -234,6 +235,8 @@ func (f *Framework) beforeEach() {
 }
 
 func (f *Framework) afterEach() {
+	f.dumpNamespace()
+
 	log.Infof(color.CyanString("=== Environment Cleaning ==="))
 	//started := time.Now()
 	// TODO: this sometimes appears after the [SLOW TEST] mark, don't know why
@@ -274,4 +277,37 @@ func (f *Framework) afterEach() {
 	})
 
 	e.Wait()
+}
+
+func (f *Framework) dumpNamespace() {
+	if ginkgo.CurrentSpecReport().Failed() {
+		if os.Getenv("E2E_ENV") == "ci" {
+			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("====== Dumping Namespace Contents ======"))
+			output, _ := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "get", "deploy,sts,rs,svc,pods")
+			if output != "" {
+				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Cluster Resources ==="))
+				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
+			}
+
+			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "get", "ampc")
+			if output != "" {
+				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Amesh Resources ==="))
+				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
+			}
+
+			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "describe", "pods")
+			if output != "" {
+				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Describe Pods ==="))
+				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
+			}
+			output = f.GetDeploymentLogs(f.cpNamespace(), "amesh-controller")
+			if output != "" {
+				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
+			}
+			output = f.GetDeploymentLogs(f.namespace, "httpbin")
+			if output != "" {
+				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
+			}
+		}
+	}
 }
