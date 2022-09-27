@@ -28,7 +28,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	protov1 "github.com/api7/amesh/api/proto/v1"
-	"github.com/api7/amesh/pkg/types"
+	"github.com/api7/amesh/controller/pkg/types"
 )
 
 var (

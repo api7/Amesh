@@ -25,9 +25,10 @@ import (
 	"github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
-	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/clientcmd"
 
+	clientset "github.com/api7/amesh/controller/apis/client/clientset/versioned"
 	"github.com/api7/amesh/e2e/framework/ameshcontroller"
 	"github.com/api7/amesh/e2e/framework/controlplane"
 	"github.com/api7/amesh/e2e/framework/utils"
@@ -47,6 +48,8 @@ type ManifestArgs struct {
 type Framework struct {
 	opts *Options
 	args *ManifestArgs
+
+	AmeshClient clientset.Interface
 
 	e2eHome string
 
@@ -82,6 +85,11 @@ func NewFramework(opts *Options) *Framework {
 	if opts.KubeConfig == "" {
 		opts.KubeConfig = utils.GetKubeConfig()
 	}
+	cfg, err := clientcmd.BuildConfigFromFlags("", opts.KubeConfig)
+	utils.AssertNil(err, "build kubeconfig")
+	ameshClient, err := clientset.NewForConfig(cfg)
+	utils.AssertNil(err, "build Amesh client")
+
 	if opts.ControlPlaneImage == "" {
 		opts.ControlPlaneImage = "istio/pilot:1.13.1"
 	}
@@ -110,8 +118,9 @@ func NewFramework(opts *Options) *Framework {
 	}
 
 	f := &Framework{
-		opts: opts,
-		args: args,
+		AmeshClient: ameshClient,
+		opts:        opts,
+		args:        args,
 
 		e2eHome: e2eHome,
 
@@ -168,11 +177,11 @@ func (f *Framework) deploy() {
 	e.Add(func() {
 		log.Infof("installing istio")
 		defer utils.LogTimeTrack(time.Now(), "istio installed (%v)")
-		assert.Nil(ginkgo.GinkgoT(), f.cp.Deploy(), "deploy istio")
+		utils.AssertNil(f.cp.Deploy(), "deploy istio")
 	}, func() {
 		log.Infof("wait for istio ready")
 		defer utils.LogTimeTrack(time.Now(), "istio ready (%v)")
-		assert.Nil(ginkgo.GinkgoT(), f.cp.WaitForReady(), "wait istio")
+		utils.AssertNil(f.cp.WaitForReady(), "wait istio")
 	}, func() {
 		f.newHttpBin()
 		f.waitForHttpbinReady()
@@ -180,11 +189,11 @@ func (f *Framework) deploy() {
 	e.Add(func() {
 		log.Infof("installing amesh-controller")
 		defer utils.LogTimeTrack(time.Now(), "amesh-controller installed (%v)")
-		assert.Nil(ginkgo.GinkgoT(), f.amesh.Deploy(), "deploy amesh-controller")
+		utils.AssertNil(f.amesh.Deploy(), "deploy amesh-controller")
 	}, func() {
 		log.Infof("wait for amesh-controller ready")
 		defer utils.LogTimeTrack(time.Now(), "amesh-controller ready (%v)")
-		assert.Nil(ginkgo.GinkgoT(), f.amesh.WaitForReady(), "wait amesh-controller")
+		utils.AssertNil(f.amesh.WaitForReady(), "wait amesh-controller")
 	})
 	e.Wait()
 }
@@ -207,9 +216,9 @@ func (f *Framework) beforeEach() {
 				"istio-injection": "enabled",
 			},
 		})
-		assert.Nil(ginkgo.GinkgoT(), err, "create namespace "+f.namespace)
+		utils.AssertNil(err, "create namespace "+f.namespace)
 
-		//assert.Nil(ginkgo.GinkgoT(), f.cp.InjectNamespace(f.namespace), "inject namespace")
+		//utils.AssertNil(f.cp.InjectNamespace(f.namespace), "inject namespace")
 	})
 	e.Add(func() {
 		log.Infof("creating namespace " + f.cpNamespace())
@@ -217,7 +226,7 @@ func (f *Framework) beforeEach() {
 		f.WaitForNamespaceDeletion(f.cpNamespace())
 
 		err := k8s.CreateNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace())
-		assert.Nil(ginkgo.GinkgoT(), err, "create namespace "+f.cpNamespace())
+		utils.AssertNil(err, "create namespace "+f.cpNamespace())
 	})
 	e.Wait()
 
@@ -232,7 +241,7 @@ func (f *Framework) afterEach() {
 
 	defer func() {
 		log.Infof("delete namespace " + f.cpNamespace())
-		assert.Nil(ginkgo.GinkgoT(), k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace()), "delete namespace "+f.cpNamespace())
+		utils.AssertNil(k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace()), "delete namespace "+f.cpNamespace())
 
 		//utils.LogTimeTrack(started, "=== Environment Cleaned (%v) ===")
 	}()
@@ -242,19 +251,19 @@ func (f *Framework) afterEach() {
 	e := utils.NewParallelExecutor("")
 	e.Add(func() {
 		log.Infof("delete namespace " + f.namespace)
-		assert.Nil(ginkgo.GinkgoT(), k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.namespace), "delete namespace "+f.namespace)
+		utils.AssertNil(k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.namespace), "delete namespace "+f.namespace)
 	})
 	e.Add(func() {
 		utils.IgnorePanic(func() {
 			log.Infof("delete istio")
 			// FIXME: make sure we handle cluster-range resource correctly since users may interrupt when deleting
-			assert.Nil(ginkgo.GinkgoT(), f.cp.Uninstall(), "uninstall istio")
+			utils.AssertNil(f.cp.Uninstall(), "uninstall istio")
 		})
 	})
 	e.Add(func() {
 		utils.IgnorePanic(func() {
 			log.Infof("delete amesh-controller")
-			assert.Nil(ginkgo.GinkgoT(), f.amesh.Uninstall(), "uninstall amesh-controller")
+			utils.AssertNil(f.amesh.Uninstall(), "uninstall amesh-controller")
 		})
 	})
 	e.Add(func() {

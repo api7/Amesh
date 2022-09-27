@@ -3,6 +3,7 @@ package tester
 import (
 	"encoding/json"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"net/http"
 	"time"
 
@@ -12,7 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 
+	controllerutils "github.com/api7/amesh/controller/utils"
 	"github.com/api7/amesh/e2e/framework"
+	"github.com/api7/amesh/e2e/framework/utils"
 )
 
 type ResponseRewriteConfig struct {
@@ -43,7 +46,7 @@ func NewTester(f *framework.Framework, conf *ResponseRewriteConfig) *PluginConfi
 		log.WithLogLevel("info"),
 		log.WithSkipFrames(3),
 	)
-	assert.Nil(ginkgo.GinkgoT(), err, "create logger")
+	utils.AssertNil(err, "create logger")
 	return &PluginConfigResponseRewriteTester{
 		f: f,
 
@@ -70,12 +73,15 @@ spec:
 		Body:    t.Body,
 		Headers: t.Headers,
 	})
-	assert.Nil(ginkgo.GinkgoT(), err, "marshal AmeshPluginConfig config")
+	utils.AssertNil(err, "marshal AmeshPluginConfig config")
 
 	err = t.f.CreateResourceFromString(fmt.Sprintf(ampc, conf))
-	assert.Nil(ginkgo.GinkgoT(), err, "create AmeshPluginConfig")
+	utils.AssertNil(err, "create AmeshPluginConfig")
 
-	time.Sleep(time.Second * 18)
+	err = t.f.WaitForAmeshPluginConfigEvents("ampc-sample", controllerutils.ConditionSync, metav1.ConditionTrue)
+	utils.AssertNil(err, "wait for events")
+
+	time.Sleep(time.Second * 10)
 
 	t.logger.SkipFramesOnce(1).Infow("update config",
 		zap.Any("body", t.Body),
@@ -154,7 +160,7 @@ func (t *PluginConfigResponseRewriteTester) DeleteAmeshPluginConfig() {
 	t.Headers = map[string]string{}
 
 	err := t.f.DeleteResourceFromString("ampc", "ampc-sample")
-	assert.Nil(ginkgo.GinkgoT(), err, "delete AmeshPluginConfig")
+	utils.AssertNil(err, "delete AmeshPluginConfig")
 
 	t.logger.Infow("delete config",
 		zap.Any("deleted_headers", t.deletedHeaders),

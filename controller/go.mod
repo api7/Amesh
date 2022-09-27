@@ -1,4 +1,4 @@
-module github.com/api7/amesh
+module github.com/api7/amesh/controller
 
 go 1.18
 

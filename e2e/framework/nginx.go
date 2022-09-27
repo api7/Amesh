@@ -24,7 +24,6 @@ import (
 	"github.com/gavv/httpexpect/v2"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/stretchr/testify/assert"
 
 	"github.com/api7/amesh/e2e/framework/utils"
 )
@@ -114,7 +113,7 @@ func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) strin
 
 	randomName := fmt.Sprintf("ngx-%d", time.Now().Nanosecond())
 
-	assert.Nil(ginkgo.GinkgoT(), f.CreateConfigMap(randomName, "proxy.conf", conf), "create config map "+randomName)
+	utils.AssertNil(f.CreateConfigMap(randomName, "proxy.conf", conf), "create config map "+randomName)
 
 	args := &renderArgs{
 		ManifestArgs: f.args,
@@ -123,12 +122,12 @@ func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) strin
 		InMesh:       inMesh,
 	}
 	artifact, err := utils.RenderManifest(nginxTemplate, args)
-	assert.Nil(ginkgo.GinkgoT(), err, "render nginx template")
+	utils.AssertNil(err, "render nginx template")
 	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
 	if err != nil {
 		log.Errorf("failed to apply nginx pod: %s", err.Error())
 	}
-	assert.Nil(ginkgo.GinkgoT(), err, "apply nginx")
+	utils.AssertNil(err, "apply nginx")
 
 	if waitReady {
 		f.WaitForNginxReady(randomName)
@@ -140,7 +139,7 @@ func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) strin
 func (f *Framework) WaitForNginxReady(name string) {
 	log.Infof("wait for nginx ready")
 	defer utils.LogTimeTrack(time.Now(), "nginx ready (%v)")
-	assert.Nil(ginkgo.GinkgoT(), f.WaitForPodsReady(name), "wait for nginx ready")
+	utils.AssertNil(f.WaitForPodsReady(name), "wait for nginx ready")
 }
 
 // NewHTTPClientToNginx creates a http client which sends requests to
@@ -166,7 +165,7 @@ func (f *Framework) NewHTTPClientToNginx(name string) *httpexpect.Expect {
 func (f *Framework) buildTunnelToNginx(name string) string {
 	tunnel := k8s.NewTunnel(f.kubectlOpts, k8s.ResourceTypeService, name, 12384, 80)
 	err := tunnel.ForwardPortE(ginkgo.GinkgoT())
-	assert.Nil(ginkgo.GinkgoT(), err, "port-forward nginx tunnel")
+	utils.AssertNil(err, "port-forward nginx tunnel")
 
 	f.tunnels = append(f.tunnels, tunnel)
 

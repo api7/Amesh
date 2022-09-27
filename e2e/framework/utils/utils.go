@@ -27,6 +27,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
@@ -160,4 +161,11 @@ func IgnorePanic(f func()) {
 		//}
 	}()
 	f()
+}
+
+func AssertNil(err error, msg ...interface{}) {
+	if err != nil {
+		log.Errorf(fmt.Sprintf("ERROR: %v", err.Error())+", %v", msg[0:]...)
+	}
+	assert.Nil(ginkgo.GinkgoT(), err, msg...)
 }

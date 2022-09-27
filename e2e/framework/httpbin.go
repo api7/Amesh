@@ -21,7 +21,6 @@ import (
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/stretchr/testify/assert"
 
 	"github.com/api7/amesh/e2e/framework/utils"
 )
@@ -70,11 +69,11 @@ spec:
 
 func (f *Framework) newHttpBin() {
 	artifact, err := utils.RenderManifest(_httpbinManifest, f.args)
-	assert.Nil(ginkgo.GinkgoT(), err, "render httpbin template")
+	utils.AssertNil(err, "render httpbin template")
 
 	log.Infof("creating httpbin")
 	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
-	assert.Nil(ginkgo.GinkgoT(), err, "apply httpbin")
+	utils.AssertNil(err, "apply httpbin")
 	f.httpbinReady = false
 }
 
@@ -85,7 +84,7 @@ func (f *Framework) waitForHttpbinReady() {
 
 	log.Infof("wait for httpbin ready")
 	defer utils.LogTimeTrack(time.Now(), "httpbin ready (%v)")
-	assert.Nil(ginkgo.GinkgoT(), f.WaitForDeploymentPodsReady("httpbin"), "wait for httpbin ready")
+	utils.AssertNil(f.WaitForDeploymentPodsReady("httpbin"), "wait for httpbin ready")
 	f.httpbinReady = true
 }
 

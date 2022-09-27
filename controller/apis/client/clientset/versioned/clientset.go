@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"net/http"
 
-	apisixv1alpha1 "github.com/api7/amesh/apis/client/clientset/versioned/typed/amesh/v1alpha1"
+	apisixv1alpha1 "github.com/api7/amesh/controller/apis/client/clientset/versioned/typed/amesh/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"

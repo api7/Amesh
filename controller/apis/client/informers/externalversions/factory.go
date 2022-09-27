@@ -22,9 +22,9 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "github.com/api7/amesh/apis/client/clientset/versioned"
-	amesh "github.com/api7/amesh/apis/client/informers/externalversions/amesh"
-	internalinterfaces "github.com/api7/amesh/apis/client/informers/externalversions/internalinterfaces"
+	versioned "github.com/api7/amesh/controller/apis/client/clientset/versioned"
+	amesh "github.com/api7/amesh/controller/apis/client/informers/externalversions/amesh"
+	internalinterfaces "github.com/api7/amesh/controller/apis/client/informers/externalversions/internalinterfaces"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

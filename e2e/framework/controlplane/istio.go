@@ -22,7 +22,6 @@ import (
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -77,7 +76,7 @@ func NewIstioControlPlane(opts *IstioOptions) ControlPlane {
 		log.WithLogLevel("error"),
 	)
 	if err != nil {
-		assert.Nil(ginkgo.GinkgoT(), err)
+		utils.AssertNil(err)
 
 		return nil
 	}

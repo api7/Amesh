@@ -23,19 +23,25 @@ import (
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	v1informer "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/kubernetes"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	ameshv1alpha1 "github.com/api7/amesh/apis/amesh/v1alpha1"
-	ameshv1alpha1informer "github.com/api7/amesh/apis/client/informers/externalversions/amesh/v1alpha1"
-	"github.com/api7/amesh/pkg/types"
-	"github.com/api7/amesh/utils"
+	ameshv1alpha1 "github.com/api7/amesh/controller/apis/amesh/v1alpha1"
+	clientset "github.com/api7/amesh/controller/apis/client/clientset/versioned"
+	ameshv1alpha1informer "github.com/api7/amesh/controller/apis/client/informers/externalversions/amesh/v1alpha1"
+	"github.com/api7/amesh/controller/pkg/types"
+	"github.com/api7/amesh/controller/utils"
 )
 
 var (
@@ -45,6 +51,9 @@ var (
 // AmeshPluginConfigReconciler reconciles a AmeshPluginConfig object
 type AmeshPluginConfigReconciler struct {
 	client.Client
+	clientset clientset.Interface
+	recorder  record.EventRecorder
+
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 
@@ -60,11 +69,18 @@ type AmeshPluginConfigReconciler struct {
 }
 
 func NewAmeshPluginConfigController(cli client.Client, scheme *runtime.Scheme,
+	clientset clientset.Interface, kubeClient kubernetes.Interface,
 	podInformer v1informer.PodInformer,
 	ameshPluginConfigInformer ameshv1alpha1informer.AmeshPluginConfigInformer) *AmeshPluginConfigReconciler {
 
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
+
 	c := &AmeshPluginConfigReconciler{
-		Client: cli,
+		Client:    cli,
+		clientset: clientset,
+		recorder:  eventBroadcaster.NewRecorder(scheme, v1.EventSource{Component: "AmeshPluginConfigReconciler"}),
+
 		Log:    ctrl.Log.WithName("controllers").WithName("AmeshPluginConfig"),
 		Scheme: scheme,
 
@@ -146,7 +162,7 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 	if instance.DeletionTimestamp != nil {
-		r.Log.Error(err, "unexpected DeletionTimestamp")
+		r.Log.Info("DeletionTimestamp found, skipped", "key", req.NamespacedName)
 		// don't requeue
 		return ctrl.Result{}, nil
 	}
@@ -203,8 +219,6 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			}
 			r.SendPluginsConfigs(req.Namespace, pods, newPlugins)
 		}
-
-		return ctrl.Result{}, nil
 	} else if !hasOldSelector {
 		// previous is everything, should remove config for no longer matched
 		r.SendPluginsConfigs(req.Namespace, onlyInOld, nil)
@@ -231,6 +245,8 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			r.SendPluginsConfigs(req.Namespace, both, newPlugins)
 		}
 	}
+
+	r.recordStatus(instance, utils.ResourceReconciled, nil, metav1.ConditionTrue)
 
 	return ctrl.Result{}, nil
 }
@@ -297,4 +313,34 @@ func (r *AmeshPluginConfigReconciler) GetPodPluginConfigs(key string) ([]*types.
 	r.pluginsCacheLock.RUnlock()
 
 	return configs, nil
+}
+
+// recordStatus record resources status
+func (r *AmeshPluginConfigReconciler) recordStatus(config *ameshv1alpha1.AmeshPluginConfig, reason string, err error, status metav1.ConditionStatus) {
+	// build condition
+	message := utils.ConditionSyncSuccess
+	if err != nil {
+		message = err.Error()
+	}
+	condition := metav1.Condition{
+		Type:               utils.ConditionSync,
+		Reason:             reason,
+		Status:             status,
+		Message:            message,
+		ObservedGeneration: config.GetGeneration(),
+	}
+
+	config = config.DeepCopy()
+
+	if config.Status.Conditions == nil {
+		conditions := make([]metav1.Condition, 0)
+		config.Status.Conditions = conditions
+	}
+	if utils.VerifyGeneration(&config.Status.Conditions, condition) {
+		meta.SetStatusCondition(&config.Status.Conditions, condition)
+		if _, errRecord := r.clientset.ApisixV1alpha1().AmeshPluginConfigs(config.Namespace).
+			UpdateStatus(context.TODO(), config, metav1.UpdateOptions{}); errRecord != nil {
+			r.Log.Error(errRecord, "failed to record status change for ApisixClusterConfig", "name", config.Name, "namespace", config.Namespace)
+		}
+	}
 }

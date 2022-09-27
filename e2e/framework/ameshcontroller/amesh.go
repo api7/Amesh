@@ -20,8 +20,6 @@ import (
 
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
-	"github.com/onsi/ginkgo/v2"
-	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 
 	"github.com/api7/amesh/e2e/framework/utils"
@@ -81,7 +79,7 @@ func NewAmeshController(opts *AmeshOptions) AmeshController {
 		log.WithLogLevel("error"),
 	)
 	if err != nil {
-		assert.Nil(ginkgo.GinkgoT(), err)
+		utils.AssertNil(err)
 
 		return nil
 	}

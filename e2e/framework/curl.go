@@ -7,7 +7,6 @@ import (
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/stretchr/testify/assert"
 
 	"github.com/api7/amesh/e2e/framework/utils"
 )
@@ -33,12 +32,12 @@ func (f *Framework) CreateCurl() string {
 	log.Infof("Create in Mesh Curl")
 
 	artifact, err := utils.RenderManifest(curlPod, f.args)
-	assert.Nil(ginkgo.GinkgoT(), err, "render curl template")
+	utils.AssertNil(err, "render curl template")
 	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
 	if err != nil {
 		log.Errorf("failed to apply curl pod: %s", err.Error())
 	}
-	assert.Nil(ginkgo.GinkgoT(), err, "apply curl pod")
+	utils.AssertNil(err, "apply curl pod")
 
 	return "consumer"
 }
@@ -47,7 +46,7 @@ func (f *Framework) WaitForCurlReady() {
 	log.Infof("wait for curl ready")
 	defer utils.LogTimeTrack(time.Now(), "curl ready (%v)")
 
-	assert.Nil(ginkgo.GinkgoT(), f.WaitForPodsReady("consumer"), "wait for curl ready")
+	utils.AssertNil(f.WaitForPodsReady("consumer"), "wait for curl ready")
 }
 
 func (f *Framework) Curl(name string, args ...string) string {
@@ -60,7 +59,7 @@ func (f *Framework) Curl(name string, args ...string) string {
 	if err != nil {
 		log.Errorf("curl failed: %s", err.Error())
 	}
-	assert.Nil(ginkgo.GinkgoT(), err, "failed to curl "+args[0])
+	utils.AssertNil(err, "failed to curl "+args[0])
 
 	return output
 }

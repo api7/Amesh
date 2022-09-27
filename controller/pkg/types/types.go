@@ -17,7 +17,7 @@ package types
 import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	ameshv1alpha1 "github.com/api7/amesh/apis/amesh/v1alpha1"
+	ameshv1alpha1 "github.com/api7/amesh/controller/apis/amesh/v1alpha1"
 )
 
 type PodPluginConfig struct {

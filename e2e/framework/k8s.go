@@ -16,11 +16,9 @@ package framework
 
 import (
 	"context"
-
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -85,10 +83,10 @@ func (f *Framework) WaitForNamespaceDeletion(namespace string) {
 				return false, nil
 			}
 			err = utils.WaitExponentialBackoff(condFunc)
-			assert.Nil(ginkgo.GinkgoT(), err, "wait for namespace deletion")
+			utils.AssertNil(err, "wait for namespace deletion")
 		}
 	} else if !apierrors.IsNotFound(err) {
-		assert.Nil(ginkgo.GinkgoT(), err, "get namespace")
+		utils.AssertNil(err, "get namespace")
 	}
 }
 
@@ -204,6 +202,22 @@ func (f *Framework) WaitForDeploymentPodsReady(name string) error {
 			}
 		}
 		return true, nil
+	}
+	return utils.WaitExponentialBackoff(condFunc)
+}
+
+func (f *Framework) WaitForAmeshPluginConfigEvents(name string, typ string, status metav1.ConditionStatus) error {
+	condFunc := func() (bool, error) {
+		item, err := f.AmeshClient.ApisixV1alpha1().AmeshPluginConfigs(f.kubectlOpts.Namespace).Get(context.Background(), name, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		for _, condition := range item.Status.Conditions {
+			if condition.Type == typ && condition.Status == status {
+				return true, nil
+			}
+		}
+		return false, nil
 	}
 	return utils.WaitExponentialBackoff(condFunc)
 }

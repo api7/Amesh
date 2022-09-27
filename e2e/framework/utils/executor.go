@@ -92,6 +92,9 @@ func (exec *parallelExecutor) Wait() {
 	}
 }
 
-func (exec *parallelExecutor) Errors() MultiError {
+func (exec *parallelExecutor) Errors() error {
+	if len(exec.errors) == 0 {
+		return nil
+	}
 	return exec.errors
 }

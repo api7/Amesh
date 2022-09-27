@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	v1lister "k8s.io/client-go/listers/core/v1"
 
-	ameshv1alpha1 "github.com/api7/amesh/apis/amesh/v1alpha1"
+	ameshv1alpha1 "github.com/api7/amesh/controller/apis/amesh/v1alpha1"
 )
 
 func PluginsConfigEqual(oldPlugins, newPlugins []ameshv1alpha1.AmeshPluginConfigPlugin) bool {
