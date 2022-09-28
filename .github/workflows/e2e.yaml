@@ -18,6 +18,8 @@ jobs:
     outputs:
       docs: ${{ steps.filter.outputs.docs }}
       go: ${{ steps.filter.outputs.go }}
+      iptables: ${{ steps.filter.outputs.iptables }}
+      controller: ${{ steps.filter.outputs.controller }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
