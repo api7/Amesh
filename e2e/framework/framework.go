@@ -183,9 +183,6 @@ func (f *Framework) deploy() {
 		log.Infof("wait for istio ready")
 		defer utils.LogTimeTrack(time.Now(), "istio ready (%v)")
 		utils.AssertNil(f.cp.WaitForReady(), "wait istio")
-	}, func() {
-		f.newHttpBin()
-		f.waitForHttpbinReady()
 	})
 	e.Add(func() {
 		log.Infof("installing amesh-controller")
@@ -197,6 +194,9 @@ func (f *Framework) deploy() {
 		utils.AssertNil(f.amesh.WaitForReady(), "wait amesh-controller")
 	})
 	e.Wait()
+
+	f.newHttpBin()
+	f.waitForHttpbinReady()
 }
 
 func (f *Framework) beforeEach() {

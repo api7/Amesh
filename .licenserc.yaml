@@ -51,4 +51,9 @@ header:
     - 'charts'
     - '**/*.patch'
     - '**/*.yaml'
+    - '**/*.proto'
+    - 'PROJECT'
+    - 'controller/hack/**'
+    - '**/*.out'
+    - 'api/go/proto/**'
   comment: never
