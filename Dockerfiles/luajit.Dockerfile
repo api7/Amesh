@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-FROM golang:1.16.5 as amesh-sidecar-build-stage
+FROM golang:1.18 as amesh-sidecar-build-stage
 
 ARG ENABLE_PROXY=false
 WORKDIR /amesh
 
+COPY api/ api/
+COPY controller/go.* controller/
+COPY controller/apis controller/apis
 COPY go.* ./
 RUN if [ "$ENABLE_PROXY" = "true" ]; then go env -w GOPROXY=https://goproxy.cn,direct ; fi \
     && go mod download

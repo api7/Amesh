@@ -18,16 +18,14 @@ import (
 	"bytes"
 	"context"
 	"os/exec"
-	"time"
 
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
+
+	"github.com/api7/amesh/e2e/framework/utils"
 )
 
 var (
@@ -73,6 +71,37 @@ type IstioOptions struct {
 
 // NewIstioControlPlane creates an istio control plane.
 func NewIstioControlPlane(opts *IstioOptions) ControlPlane {
+	logger, err := log.NewLogger(
+		log.WithContext("istio"),
+		log.WithLogLevel("error"),
+	)
+	if err != nil {
+		utils.AssertNil(err)
+
+		return nil
+	}
+
+	return &istio{
+		logger:  logger,
+		options: opts,
+	}
+}
+
+func (cp *istio) Namespace() string {
+	return cp.options.Namespace
+}
+
+func (cp *istio) Type() string {
+	return "istio"
+}
+
+func (cp *istio) Addr() string {
+	return "grpc://" + cp.clusterIP + ":15010"
+}
+
+func (cp *istio) initCmd() {
+	opts := cp.options
+
 	kc := opts.KubeConfig
 	image := opts.IstioImage
 
@@ -104,84 +133,43 @@ func NewIstioControlPlane(opts *IstioOptions) ControlPlane {
 	discovery.Stderr = discoveryStderr
 	deleteDiscovery.Stderr = cleanupDiscoveryStderr
 
-	logger, err := log.NewLogger(
-		log.WithContext("istio"),
-		log.WithLogLevel("error"),
-	)
-	if err != nil {
-		assert.Nil(ginkgo.GinkgoT(), err)
-
-		return nil
-	}
-
-	return &istio{
-		logger:                 logger,
-		base:                   base,
-		discovery:              discovery,
-		cleanupBase:            deleteBase,
-		cleanupDiscovery:       deleteDiscovery,
-		options:                opts,
-		baseStderr:             baseStderr,
-		cleanupBaseStderr:      cleanupBaseStderr,
-		discoveryStderr:        discoveryStderr,
-		cleanupDiscoveryStderr: cleanupDiscoveryStderr,
-	}
-}
-
-func (cp *istio) Namespace() string {
-	return cp.options.Namespace
-}
-
-func (cp *istio) Type() string {
-	return "istio"
-}
-
-func (cp *istio) Addr() string {
-	return "grpc://" + cp.clusterIP + ":15010"
+	cp.base = base
+	cp.discovery = discovery
+	cp.cleanupBase = deleteBase
+	cp.cleanupDiscovery = deleteDiscovery
+	cp.baseStderr = baseStderr
+	cp.cleanupBaseStderr = cleanupBaseStderr
+	cp.discoveryStderr = discoveryStderr
+	cp.cleanupDiscoveryStderr = cleanupDiscoveryStderr
 }
 
 func (cp *istio) Deploy() error {
+	cp.initCmd()
+
 	err := cp.base.Run()
 	if err != nil {
-		log.Errorw("failed to run istio-base install command",
-			zap.String("command", cp.base.String()),
-			zap.Error(err),
-			zap.String("stderr", cp.baseStderr.String()),
-		)
+		log.Errorf("failed to run istio-base install command")
+		log.Errorf("command: %s", cp.base.String())
+		log.Errorf("err: %s", err.Error())
+		log.Errorf("stderr: %s", cp.baseStderr.String())
 		return err
 	}
+
 	err = cp.discovery.Run()
 	if err != nil {
-		log.Errorw("failed to run istio-discovery install command",
-			zap.String("command", cp.discovery.String()),
-			zap.String("stderr", cp.discoveryStderr.String()),
-		)
+		log.Errorf("failed to run istio-discovery install command")
+		log.Errorf("command: %s", cp.discovery.String())
+		log.Errorf("err: %s", err.Error())
+		log.Errorf("stderr: %s", cp.discoveryStderr.String())
 		return err
 	}
-
-	ctlOpts := &k8s.KubectlOptions{
-		ConfigPath: cp.options.KubeConfig,
-		Namespace:  cp.options.Namespace,
-	}
-
-	var (
-		svc *corev1.Service
-	)
-
-	condFunc := func() (bool, error) {
-		svc, err = k8s.GetServiceE(ginkgo.GinkgoT(), ctlOpts, "istiod")
-		if err != nil {
-			return false, err
-		}
-		return k8s.IsServiceAvailable(svc), nil
-	}
-
-	if err := wait.PollImmediate(3*time.Second, 15*time.Second, condFunc); err != nil {
-		return err
-	}
-
-	cp.clusterIP = svc.Spec.ClusterIP
 	return nil
+}
+
+func (cp *istio) WaitForReady() error {
+	var err error
+	cp.clusterIP, err = utils.WaitForServiceReady(cp.options.KubectlOpts, cp.options.Namespace, "istiod")
+	return err
 }
 
 func (cp *istio) Uninstall() error {

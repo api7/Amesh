@@ -58,7 +58,7 @@ func (m *AmeshPlugin) validate(all bool) error {
 	if _, ok := _AmeshPlugin_Type_InLookup[m.GetType()]; !ok {
 		err := AmeshPluginValidationError{
 			field:  "Type",
-			reason: "value must be in list [pre-req post-req]",
+			reason: "value must be in list [ pre-req post-req]",
 		}
 		if !all {
 			return err
@@ -165,6 +165,7 @@ var _ interface {
 } = AmeshPluginValidationError{}
 
 var _AmeshPlugin_Type_InLookup = map[string]struct{}{
+	"":         {},
 	"pre-req":  {},
 	"post-req": {},
 }
@@ -190,6 +191,17 @@ func (m *AmeshPluginConfig) validate(all bool) error {
 	}
 
 	var errors []error
+
+	if utf8.RuneCountInString(m.GetName()) < 1 {
+		err := AmeshPluginConfigValidationError{
+			field:  "Name",
+			reason: "value length must be at least 1 runes",
+		}
+		if !all {
+			return err
+		}
+		errors = append(errors, err)
+	}
 
 	for idx, item := range m.GetPlugins() {
 		_, _ = idx, item

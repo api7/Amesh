@@ -18,7 +18,7 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "github.com/api7/amesh/apis/client/clientset/versioned/typed/amesh/v1alpha1"
+	v1alpha1 "github.com/api7/amesh/controller/apis/client/clientset/versioned/typed/amesh/v1alpha1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
 )

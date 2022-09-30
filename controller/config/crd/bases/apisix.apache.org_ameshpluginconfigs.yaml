@@ -48,8 +48,10 @@ spec:
                       minLength: 1
                       type: string
                     type:
+                      default: ""
                       description: AmeshPluginConfigType is the config type
                       enum:
+                      - ""
                       - pre-req
                       - post-req
                       type: string

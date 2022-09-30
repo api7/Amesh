@@ -28,7 +28,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	protov1 "github.com/api7/amesh/api/proto/v1"
-	"github.com/api7/amesh/pkg/types"
+	"github.com/api7/amesh/controller/pkg/types"
 )
 
 var (
@@ -117,6 +117,7 @@ func (c *GRPCController) sendPodPluginConfig(podKey string, srv protov1.AmeshSer
 	var pluginConfigs []*protov1.AmeshPluginConfig
 	for _, config := range configs {
 		pluginConfig := &protov1.AmeshPluginConfig{
+			Name:    config.Name,
 			Plugins: []*protov1.AmeshPlugin{},
 			Version: config.Version,
 		}

@@ -20,12 +20,12 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/api7/gopkg/pkg/log"
 	"github.com/gavv/httpexpect/v2"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/stretchr/testify/assert"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/api7/amesh/e2e/framework/utils"
 )
 
 const (
@@ -58,7 +58,7 @@ spec:
       labels:
         app: {{ .Name }}
       annotations:
-        sidecar.istio.io/inject: "false"
+        sidecar.istio.io/inject: "{{ .InMesh }}"
     spec:
       volumes:
       - name: conf
@@ -94,62 +94,52 @@ type renderArgs struct {
 	*ManifestArgs
 	Name      string
 	ConfigMap string
+	InMesh    bool
 }
 
-func (f *Framework) CreateNginxTo(svc string) string {
+func (f *Framework) CreateNginxOutsideMeshTo(svc string, waitReady bool) string {
+	log.Infof("Create NGINX outside Mesh to " + svc)
+	return f.createNginxTo(svc, false, waitReady)
+}
+
+func (f *Framework) CreateNginxInMeshTo(svc string, waitReady bool) string {
+	log.Infof("Create NGINX in Mesh to " + svc)
+	return f.createNginxTo(svc, true, waitReady)
+}
+
+func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) string {
 
 	conf := fmt.Sprintf(nginxConfTemplate, svc, svc)
 
 	randomName := fmt.Sprintf("ngx-%d", time.Now().Nanosecond())
 
-	assert.Nil(ginkgo.GinkgoT(), f.CreateConfigMap(randomName, "proxy.conf", conf), "create config map "+randomName)
+	utils.AssertNil(f.CreateConfigMap(randomName, "proxy.conf", conf), "create config map "+randomName)
 
 	args := &renderArgs{
 		ManifestArgs: f.args,
 		Name:         randomName,
 		ConfigMap:    randomName,
+		InMesh:       inMesh,
 	}
-	artifact, err := RenderManifest(nginxTemplate, args)
-	assert.Nil(ginkgo.GinkgoT(), err, "render nginx template")
+	artifact, err := utils.RenderManifest(nginxTemplate, args)
+	utils.AssertNil(err, "render nginx template")
 	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
-	assert.Nil(ginkgo.GinkgoT(), err, "apply nginx")
+	if err != nil {
+		log.Errorf("failed to apply nginx pod: %s", err.Error())
+	}
+	utils.AssertNil(err, "apply nginx")
 
-	assert.Nil(ginkgo.GinkgoT(), f.waitUntilAllNginxPodsReady(randomName), "wait for nginx ready")
+	if waitReady {
+		f.WaitForNginxReady(randomName)
+	}
 
 	return randomName
 }
 
-func (f *Framework) waitUntilAllNginxPodsReady(name string) error {
-	opts := metav1.ListOptions{
-		LabelSelector: "app=" + name,
-	}
-	condFunc := func() (bool, error) {
-		items, err := k8s.ListPodsE(ginkgo.GinkgoT(), f.kubectlOpts, opts)
-		if err != nil {
-			return false, err
-		}
-		if len(items) == 0 {
-			ginkgo.GinkgoT().Log("no nginx pods created")
-			return false, nil
-		}
-		for _, pod := range items {
-			found := false
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type != corev1.PodReady {
-					continue
-				}
-				found = true
-				if cond.Status != corev1.ConditionTrue {
-					return false, nil
-				}
-			}
-			if !found {
-				return false, nil
-			}
-		}
-		return true, nil
-	}
-	return waitExponentialBackoff(condFunc)
+func (f *Framework) WaitForNginxReady(name string) {
+	log.Infof("wait for nginx ready")
+	defer utils.LogTimeTrack(time.Now(), "nginx ready (%v)")
+	utils.AssertNil(f.WaitForPodsReady(name), "wait for nginx ready")
 }
 
 // NewHTTPClientToNginx creates a http client which sends requests to
@@ -175,7 +165,7 @@ func (f *Framework) NewHTTPClientToNginx(name string) *httpexpect.Expect {
 func (f *Framework) buildTunnelToNginx(name string) string {
 	tunnel := k8s.NewTunnel(f.kubectlOpts, k8s.ResourceTypeService, name, 12384, 80)
 	err := tunnel.ForwardPortE(ginkgo.GinkgoT())
-	assert.Nil(ginkgo.GinkgoT(), err, "port-forward nginx tunnel")
+	utils.AssertNil(err, "port-forward nginx tunnel")
 
 	f.tunnels = append(f.tunnels, tunnel)
 

@@ -79,19 +79,20 @@ func getIpAddr() (string, error) {
 	return ipAddr, nil
 }
 
-func NewAgent(ctx context.Context, src string, dataZone, versionZone unsafe.Pointer, logLevel, logOutput string) (*Agent, error) {
+func NewAgent(ctx context.Context, src, ameshGrpc string, dataZone, versionZone unsafe.Pointer, logLevel, logOutput string) (*Agent, error) {
 	ipAddr, err := getIpAddr()
 	if err != nil {
 		return nil, err
 	}
 
 	p, err := provisioner.NewXDSProvisioner(&provisioner.Config{
-		RunId:           uuid.NewString(),
-		LogLevel:        logLevel,
-		LogOutput:       logOutput,
-		XDSConfigSource: src,
-		Namespace:       getNamespace(),
-		IpAddress:       ipAddr,
+		RunId:             uuid.NewString(),
+		LogLevel:          logLevel,
+		LogOutput:         logOutput,
+		XDSConfigSource:   src,
+		AmeshConfigSource: ameshGrpc,
+		Namespace:         getNamespace(),
+		IpAddress:         ipAddr,
 	})
 	if err != nil {
 		return nil, err

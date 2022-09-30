@@ -4,6 +4,6 @@ metadata:
   name: ameshpluginconfig-sample
 spec:
   plugins:
-    - name: echo
-      type: pre-req
-      config: '{}'
+    - name: response-rewrite
+      type: ""
+      config: '{"body": "BODY_REWRITE", "headers": {"X-Header":"Rewrite"}}'

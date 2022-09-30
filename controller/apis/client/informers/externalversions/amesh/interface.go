@@ -18,8 +18,8 @@ limitations under the License.
 package amesh
 
 import (
-	v1alpha1 "github.com/api7/amesh/apis/client/informers/externalversions/amesh/v1alpha1"
-	internalinterfaces "github.com/api7/amesh/apis/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/api7/amesh/controller/apis/client/informers/externalversions/amesh/v1alpha1"
+	internalinterfaces "github.com/api7/amesh/controller/apis/client/informers/externalversions/internalinterfaces"
 )
 
 // Interface provides access to each of this group's versions.

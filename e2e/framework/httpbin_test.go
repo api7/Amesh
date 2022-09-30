@@ -18,11 +18,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/api7/amesh/e2e/framework/utils"
 )
 
 func TestName(t *testing.T) {
 
-	artifact, _ := RenderManifest(_httpbinManifest, &ManifestArgs{
+	artifact, _ := utils.RenderManifest(_httpbinManifest, &ManifestArgs{
 		LocalRegistry:   "10.0.0.2:5000",
 		HttpBinReplicas: 1,
 	})

@@ -17,7 +17,7 @@ spec:
     spec:
       serviceAccountName: amesh-controller-service-account
       containers:
-        - name: mutator
+        - name: amesh-controller
           image: "{{ .Values.controller.image }}"
           imagePullPolicy: {{ .Values.controller.pullPolicy }}
           resources:

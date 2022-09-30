@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 
-	ameshv1alpha1lister "github.com/api7/amesh/apis/client/listers/amesh/v1alpha1"
+	ameshv1alpha1lister "github.com/api7/amesh/controller/apis/client/listers/amesh/v1alpha1"
 )
 
 // SelectorCache is a cache of selectors to avoid high CPU consumption caused by frequent calls

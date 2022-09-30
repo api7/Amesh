@@ -32,11 +32,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	ameshv1alpha1 "github.com/api7/amesh/apis/amesh/v1alpha1"
-	clientset "github.com/api7/amesh/apis/client/clientset/versioned"
-	ameshv1alpha1informers "github.com/api7/amesh/apis/client/informers/externalversions"
-	"github.com/api7/amesh/controllers/amesh"
-	"github.com/api7/amesh/pkg"
+	ameshv1alpha1 "github.com/api7/amesh/controller/apis/amesh/v1alpha1"
+	clientset "github.com/api7/amesh/controller/apis/client/clientset/versioned"
+	ameshv1alpha1informers "github.com/api7/amesh/controller/apis/client/informers/externalversions"
+	"github.com/api7/amesh/controller/controllers/amesh"
+	"github.com/api7/amesh/controller/pkg"
 )
 
 var (
@@ -112,6 +112,7 @@ func main() {
 	// Controllers
 
 	ameshPluginConfigController := amesh.NewAmeshPluginConfigController(mgr.GetClient(), mgr.GetScheme(),
+		ameshClient, kubeClient,
 		kubeInformerFactory.Core().V1().Pods(),
 		ameshInformerFactory.Apisix().V1alpha1().AmeshPluginConfigs(),
 	)

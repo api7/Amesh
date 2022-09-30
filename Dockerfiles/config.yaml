@@ -343,6 +343,7 @@ plugins:                          # plugin list (sorted by priority)
   - prometheus
   - traffic-split
   - proxy-rewrite
+  - response-rewrite
 
   # - real-ip                        # priority: 23000
   # - client-control                 # priority: 22000

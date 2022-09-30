@@ -25,8 +25,8 @@ COPY .api.tmp ../api
 RUN go mod download
 
 # Copy the go source
-COPY main.go main.go
 COPY apis/ apis/
+COPY main.go main.go
 COPY utils/ utils/
 COPY pkg/ pkg/
 COPY controllers/ controllers/

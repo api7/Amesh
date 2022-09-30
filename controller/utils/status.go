@@ -12,30 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package e2e
+package utils
 
 import (
-	"github.com/api7/gopkg/pkg/log"
-	"github.com/fatih/color"
-	terratestlogger "github.com/gruntwork-io/terratest/modules/logger"
-
-	_ "github.com/api7/amesh/e2e/test/amesh"
-	_ "github.com/api7/amesh/e2e/test/base"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func runE2E() {
-	var err error
-	log.DefaultLogger, err = log.NewLogger(
-		log.WithLogLevel("info"),
-		log.WithSkipFrames(3),
-	)
-	if err != nil {
-		panic(err)
+const (
+	ConditionSync        = "Sync"
+	ConditionSyncSuccess = "Sync Success"
+
+	ResourceReconciled = "Reconciled"
+)
+
+// VerifyGeneration verify generation to decide whether to update status
+func VerifyGeneration(conditions *[]metav1.Condition, newCondition metav1.Condition) bool {
+	existingCondition := meta.FindStatusCondition(*conditions, newCondition.Type)
+	if existingCondition != nil && existingCondition.ObservedGeneration > newCondition.ObservedGeneration {
+		return false
 	}
-
-	terratestlogger.Default = terratestlogger.Discard
-	terratestlogger.Terratest = terratestlogger.Discard
-	terratestlogger.Global = terratestlogger.Discard
-
-	color.NoColor = false
+	return true
 }

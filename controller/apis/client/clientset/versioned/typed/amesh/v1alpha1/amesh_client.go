@@ -20,8 +20,8 @@ package v1alpha1
 import (
 	"net/http"
 
-	v1alpha1 "github.com/api7/amesh/apis/amesh/v1alpha1"
-	"github.com/api7/amesh/apis/client/clientset/versioned/scheme"
+	v1alpha1 "github.com/api7/amesh/controller/apis/amesh/v1alpha1"
+	"github.com/api7/amesh/controller/apis/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 

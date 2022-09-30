@@ -30,7 +30,9 @@ const (
 
 // AmeshPluginConfigPlugin is the plugin config detail
 type AmeshPluginConfigPlugin struct {
-	//+kubebuilder:validation:Enum=pre-req;post-req
+	//+optional
+	//+kubebuilder:validation:Enum="";pre-req;post-req
+	//+kubebuilder:default=""
 	Type AmeshPluginConfigType `json:"type,omitempty" yaml:"type,omitempty"`
 	//+kubebuilder:validation:Required
 	//+kubebuilder:validation:MinLength=1
