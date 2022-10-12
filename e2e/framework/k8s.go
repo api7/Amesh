@@ -23,6 +23,7 @@ import (
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,9 +57,42 @@ func (f *Framework) CreateResourceFromString(res string) error {
 	return k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, res)
 }
 
-// CreateResourceFromString creates a Kubernetes resource from the given manifest.
+// CreateResourceFromString deletes a Kubernetes resource from the given manifest.
 func (f *Framework) DeleteResourceFromString(res, name string) error {
 	_, err := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "delete", res, name)
+	return err
+}
+
+func (f *Framework) DeleteResource(resourceType, namespace string, args ...string) error {
+	cmd := []string{"-n", namespace, "delete", resourceType}
+	cmd = append(cmd, args...)
+	err := k8s.RunKubectlE(f.t, f.kubectlOpts, cmd...)
+
+	log.Info("executing command: kubectl " + strings.Join(cmd, " "))
+	if err != nil {
+		log.Errorw("delete resource failed",
+			zap.Error(err),
+			zap.String("namespace", namespace),
+			zap.String("resource", resourceType),
+			zap.Strings("args", args),
+		)
+	}
+	return err
+}
+
+// DeletePod deletes a Kubernetes pod from the given namespace and name.
+func (f *Framework) DeletePod(namespace, name string) error {
+	err := f.DeleteResource("pod", namespace, name)
+	return err
+}
+
+// DeletePod deletes a Kubernetes pod from the given namespace and labels.
+func (f *Framework) DeletePodByLabel(namespace string, labels ...string) error {
+	var labelArgs []string
+	for _, label := range labels {
+		labelArgs = append(labelArgs, "-l", label)
+	}
+	err := f.DeleteResource("pod", namespace, labelArgs...)
 	return err
 }
 
@@ -131,9 +165,14 @@ const (
 	failureToleration = 10
 )
 
-func (f *Framework) WaitForDeploymentPodsReady(name string) error {
+func (f *Framework) WaitForDeploymentPodsReady(name string, namespace ...string) error {
 	opts := metav1.ListOptions{
 		LabelSelector: "app=" + name,
+	}
+
+	ns := f.kubectlOpts.Namespace
+	if len(namespace) > 0 {
+		ns = namespace[0]
 	}
 
 	deploymentFailures := 0
@@ -144,7 +183,14 @@ func (f *Framework) WaitForDeploymentPodsReady(name string) error {
 		} else {
 			log.Debugf("waiting %s pods...", name)
 		}
-		items, err := k8s.ListPodsE(ginkgo.GinkgoT(), f.kubectlOpts, opts)
+
+		items, err := k8s.ListPodsE(ginkgo.GinkgoT(), &k8s.KubectlOptions{
+			ContextName:   f.kubectlOpts.ContextName,
+			ConfigPath:    f.kubectlOpts.ConfigPath,
+			Namespace:     ns,
+			Env:           f.kubectlOpts.Env,
+			InClusterAuth: f.kubectlOpts.InClusterAuth,
+		}, opts)
 		if err != nil {
 			return false, err
 		}

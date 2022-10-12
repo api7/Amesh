@@ -28,7 +28,7 @@ import (
 	ameshapi "github.com/api7/amesh/api/proto/v1"
 )
 
-//func TestAmeshGrpcServer(t *testing.T) {
+// func TestAmeshGrpcServer(t *testing.T) {
 func AmeshGrpcServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()

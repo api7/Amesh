@@ -22,11 +22,11 @@ import (
 	"github.com/api7/amesh/e2e/test/tester"
 )
 
-var _ = ginkgo.Describe("[amesh-controller functions]", func() {
+var _ = ginkgo.Describe("[amesh-controller functions] AmeshPluginConfig:", func() {
 	f := framework.NewDefaultFramework()
 
 	utils.Case("should be able to inject plugins", func() {
-		t := tester.NewTester(f, &tester.ResponseRewriteConfig{
+		t := tester.NewPluginConfigTester(f, &tester.ResponseRewriteConfig{
 			Body: "BODY_REWRITE",
 			Headers: map[string]string{
 				"X-Header": "Rewrite",
@@ -39,7 +39,7 @@ var _ = ginkgo.Describe("[amesh-controller functions]", func() {
 	})
 
 	utils.Case("should be able to update plugins", func() {
-		t := tester.NewTester(f, &tester.ResponseRewriteConfig{
+		t := tester.NewPluginConfigTester(f, &tester.ResponseRewriteConfig{
 			Headers: map[string]string{
 				"X-Header": "Rewrite",
 			},
@@ -69,7 +69,7 @@ var _ = ginkgo.Describe("[amesh-controller functions]", func() {
 	})
 
 	utils.Case("should be able to delete plugins", func() {
-		t := tester.NewTester(f, &tester.ResponseRewriteConfig{
+		t := tester.NewPluginConfigTester(f, &tester.ResponseRewriteConfig{
 			Headers: map[string]string{
 				"X-Header": "Rewrite",
 			},

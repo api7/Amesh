@@ -4,18 +4,18 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//    http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
 package provisioner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -73,6 +73,17 @@ type xdsProvisioner struct {
 	upstreams map[string]*apisix.Upstream
 	// this map enrolls all clusters that require further EDS requests.
 	edsRequiredClusters util.StringSet
+
+	// TODO: emit events and change reconnect e2e
+	connected bool
+	ready     bool
+}
+
+type XdsProvisionerStatus struct {
+	XdsConnected          bool `json:"xdsConnected"`
+	XdsProvisionerReady   bool `json:"xdsProvisionerReady"`
+	AmeshConnected        bool `json:"ameshConnected"`
+	AmeshProvisionerReady bool `json:"ameshProvisionerReady"`
 }
 
 type Config struct {
@@ -140,6 +151,16 @@ func NewXDSProvisioner(cfg *Config) (types.Provisioner, error) {
 	return p, nil
 }
 
+func (p *xdsProvisioner) Status() (string, error) {
+	str, err := json.Marshal(&XdsProvisionerStatus{
+		XdsConnected:          p.connected,
+		XdsProvisionerReady:   p.ready,
+		AmeshConnected:        p.amesh.connected,
+		AmeshProvisionerReady: p.amesh.ready,
+	})
+	return string(str), err
+}
+
 func (p *xdsProvisioner) EventsChannel() <-chan []types.Event {
 	return p.evChan
 }
@@ -162,6 +183,7 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 	}
 
 	for {
+		p.logger.Info("try connect xds")
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		conn, err := grpc.DialContext(ctx, p.src,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -173,7 +195,8 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 				zap.Error(err),
 				zap.String("xds_source", p.src),
 			)
-			return err
+			time.Sleep(time.Second * 5)
+			continue
 		}
 		cleanup := func() {
 			cancel()
@@ -184,21 +207,26 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 				)
 			}
 		}
-		p.logger.Info("xds connected")
+
+		p.connected = true
+		p.logger.Info("xds connected") // TODO: appears twice in log
 
 		if err := p.run(stop, conn); err != nil {
+			p.ready = false
 			cleanup()
-			return err
+			p.logger.Errorw("failed to run provisioner",
+				zap.Error(err),
+			)
+			time.Sleep(time.Second * 5)
+			continue
 		}
 
 		select {
 		case <-stop:
 			cleanup()
 			return nil
-		case <-p.amesh.EventsChannel():
-			p.logger.Info("amesh events received, updating routes")
-			p.UpdateRoutesPlugin()
 		case err = <-p.resetCh:
+			p.connected = false
 			p.logger.Errorw("xds grpc client reset, closing",
 				zap.Error(err),
 			)
@@ -217,11 +245,23 @@ func (p *xdsProvisioner) run(stop <-chan struct{}, conn *grpc.ClientConn) error 
 		return err
 	}
 
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case <-p.amesh.EventsChannel():
+				p.logger.Info("amesh events received, updating routes")
+				p.UpdateRoutesPlugin()
+			}
+		}
+	}()
 	go p.sendLoop(stop, client)
 	go p.recvLoop(stop, client)
 	go p.translateLoop(stop)
 	go p.firstSend()
 
+	p.ready = true
 	return nil
 }
 
@@ -279,6 +319,7 @@ func (p *xdsProvisioner) recvLoop(stop <-chan struct{}, client discoveryv3.Aggre
 			case <-stop:
 				return
 			default:
+				p.connected = false
 				p.logger.Errorw("failed to receive discovery response",
 					zap.Error(err),
 				)
@@ -434,10 +475,14 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			ups, err := p.processClusterLoadAssignmentV3(&cla)
 			if err == ErrorRequireFurtherEDS {
 				// TODO process this
+				xdsSrc := p.src
+				xdsSrc = strings.TrimPrefix(xdsSrc, "grpc://")
+				xdsSrc = strings.Split(xdsSrc, ":")[0]
 				ignoredClusterName := []string{
 					"kubernetes.default.svc.cluster.local",
 					"kube-system.svc.cluster.local",
 					"istio-system.svc.cluster.local",
+					xdsSrc,
 				}
 
 				ignored := false

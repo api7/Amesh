@@ -55,7 +55,7 @@ type PluginConfigResponseRewriteTester struct {
 	logger *log.Logger
 }
 
-func NewTester(f *framework.Framework, conf *ResponseRewriteConfig) *PluginConfigResponseRewriteTester {
+func NewPluginConfigTester(f *framework.Framework, conf *ResponseRewriteConfig) *PluginConfigResponseRewriteTester {
 	logger, err := log.NewLogger(
 		log.WithLogLevel("info"),
 		log.WithSkipFrames(3),
@@ -223,7 +223,7 @@ func (t *PluginConfigResponseRewriteTester) ValidateInMeshCurlAccess(withoutHead
 	f := t.f
 	t.waitCurl()
 
-	output := f.Curl(t.curlName, "httpbin/ip")
+	output := f.CurlInPod(t.curlName, "httpbin/ip")
 
 	assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
 

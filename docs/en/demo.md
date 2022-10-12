@@ -72,20 +72,13 @@ plugins:
   - proxy-rewrite
 ```
 
-Build the Amesh APISIX image using the following Dockerfile,
-
-```Dockerfile
-FROM amesh-apisix:dev
-
-WORKDIR /usr/local/apisix
-COPY apisix apisix
-COPY conf conf
-COPY libxds.so libxds.so
-```
+Build the Amesh APISIX sidecar image using the following command,
 
 ```bash
-docker build -t apisix:custom -f ./Dockerfile .
+make build-amesh-sidecar-image
 ```
+
+This will build the amesh-sidecar:dev image, which will be the image that sidecar will use.
 
 ## Run the Demo
 
@@ -111,7 +104,7 @@ Push image `amesh-iptables:dev` and `apisix:custom` to your registry, assuming t
 export YOUR_REGISTRY="10.0.0.20:5000"
 ```
 
-To install Istio：
+To install Istio, run：
 
 ```bash
 export ISTIO_RELEASE=1.13.1

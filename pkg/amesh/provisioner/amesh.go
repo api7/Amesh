@@ -50,6 +50,10 @@ type ameshProvisioner struct {
 
 	evChan  chan struct{}
 	resetCh chan error
+
+	// TODO: emit events and change reconnect e2e
+	connected bool
+	ready     bool
 }
 
 func NewAmeshProvisioner(src, logLevel, logOutput string) (*ameshProvisioner, error) {
@@ -95,11 +99,15 @@ func (p *ameshProvisioner) Run(stop <-chan struct{}) error {
 		)
 		if err != nil {
 			cancel()
-			p.logger.Errorw("failed to conn amesh source",
+			p.logger.Infow("failed to conn amesh source, will retry",
 				zap.Error(err),
 				zap.String("amesh_source", p.src),
 			)
-			return err
+			// If we try to use K8s service as src and watch its availability through informer,
+			// may have performance issues at large scale.
+			// So we simply do a retry with timeout
+			time.Sleep(time.Second * 5)
+			continue
 		}
 		cleanup := func() {
 			cancel()
@@ -110,9 +118,12 @@ func (p *ameshProvisioner) Run(stop <-chan struct{}) error {
 				)
 			}
 		}
+
+		p.connected = true
 		p.logger.Info("amesh connected")
 
 		if err := p.run(stop, conn); err != nil {
+			p.ready = false
 			cleanup()
 			return err
 		}
@@ -122,6 +133,8 @@ func (p *ameshProvisioner) Run(stop <-chan struct{}) error {
 			cleanup()
 			return nil
 		case err = <-p.resetCh:
+			p.connected = false
+
 			p.logger.Errorw("amesh grpc client reset, closing",
 				zap.Error(err),
 			)
@@ -146,6 +159,7 @@ func (p *ameshProvisioner) run(stop <-chan struct{}, conn *grpc.ClientConn) erro
 
 	go p.recvLoop(stop, client)
 
+	p.ready = true
 	return nil
 }
 
@@ -162,6 +176,7 @@ func (p *ameshProvisioner) recvLoop(stop <-chan struct{}, client ameshapi.AmeshS
 			case <-stop:
 				return
 			default:
+				p.connected = false
 				p.logger.Errorw("failed to receive amesh plugin response",
 					zap.Error(err),
 				)

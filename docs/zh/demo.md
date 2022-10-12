@@ -168,7 +168,7 @@ kubectl run consumer --image curlimages/curl --image-pull-policy IfNotPresent --
 测试是否能够正常访问：
 
 ```bash
-kubectl exec -it -c istio-proxy consumer -- curl -i -XGET "http://productpage:9080/productpage" |  grep -o "<title>.*</title>"
+kubectl exec -it -c istio-proxy consumer -- curl -i -XGET "http://productpage:9080/productpage" | grep -o "<title>.*</title>"
 ```
 
 输出应该是：

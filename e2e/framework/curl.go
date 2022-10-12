@@ -15,6 +15,7 @@
 package framework
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 
 	"github.com/api7/amesh/e2e/framework/utils"
+	"github.com/api7/amesh/pkg/amesh/provisioner"
 )
 
 const (
@@ -63,7 +65,7 @@ func (f *Framework) WaitForCurlReady() {
 	utils.AssertNil(f.WaitForPodsReady("consumer"), "wait for curl ready")
 }
 
-func (f *Framework) Curl(name string, args ...string) string {
+func (f *Framework) CurlInPod(name string, args ...string) string {
 	log.SkipFramesOnce(1).Infof("Executing: curl -s -i " + strings.Join(args, " "))
 
 	cmd := []string{"exec", name, "-c", "istio-proxy", "--", "curl", "-s", "-i"}
@@ -76,4 +78,20 @@ func (f *Framework) Curl(name string, args ...string) string {
 	utils.AssertNil(err, "failed to curl "+args[0])
 
 	return output
+}
+
+func (f *Framework) GetSidecarStatus(podName string) *provisioner.XdsProvisionerStatus {
+	cmd := []string{"exec", podName, "-c", "istio-proxy", "--", "curl", "-s", "localhost:9999/status"}
+	output, err := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, cmd...)
+
+	if err != nil {
+		log.Errorf("get sidecar %s status failed: %s", podName, err.Error())
+	}
+	utils.AssertNil(err, "failed to get sidecar %s status", podName)
+
+	var status provisioner.XdsProvisionerStatus
+	err = json.Unmarshal([]byte(output), &status)
+	utils.AssertNil(err, "failed to unmarshal sidecar %s status", podName)
+
+	return &status
 }

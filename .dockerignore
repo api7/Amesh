@@ -4,3 +4,4 @@ bin/
 .idea
 .vscode
 .local
+controller/bin

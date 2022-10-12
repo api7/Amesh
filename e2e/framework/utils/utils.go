@@ -165,7 +165,12 @@ func IgnorePanic(f func()) {
 
 func AssertNil(err error, msg ...interface{}) {
 	if err != nil {
-		log.Errorf(fmt.Sprintf("ERROR: %v", err.Error())+", %v", msg[0:]...)
+		log.SkipFramesOnce(1)
+		errorMsg := fmt.Sprintf("ERROR: %v", err.Error())
+		if len(msg) > 0 {
+			errorMsg += ", " + fmt.Sprintf(msg[0].(string), msg[1:]...)
+		}
+		log.Errorf(errorMsg)
 	}
 	assert.Nil(ginkgo.GinkgoT(), err, msg...)
 }

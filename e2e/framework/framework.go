@@ -139,7 +139,11 @@ func NewFramework(opts *Options) *Framework {
 	return f
 }
 
-func (f *Framework) cpNamespace() string {
+func (f *Framework) AppNamespace() string {
+	return f.namespace
+}
+
+func (f *Framework) ControlPlaneNamespace() string {
 	return f.namespace + "-cp"
 }
 
@@ -152,7 +156,7 @@ func (f *Framework) initFramework() {
 
 	istioOpts := &controlplane.IstioOptions{
 		KubeConfig:       f.opts.KubeConfig,
-		Namespace:        f.cpNamespace(),
+		Namespace:        f.ControlPlaneNamespace(),
 		KubectlOpts:      f.kubectlOpts,
 		IstioImage:       f.args.LocalRegistry + "/" + f.opts.ControlPlaneImage,
 		SidecarInitImage: f.args.LocalRegistry + "/" + f.opts.SidecarInitImage,
@@ -163,7 +167,7 @@ func (f *Framework) initFramework() {
 
 	f.amesh = ameshcontroller.NewAmeshController(&ameshcontroller.AmeshOptions{
 		KubeConfig:  f.opts.KubeConfig,
-		Namespace:   f.cpNamespace(),
+		Namespace:   f.ControlPlaneNamespace(),
 		KubectlOpts: f.kubectlOpts,
 		AmeshImage:  f.args.LocalRegistry + "/" + f.opts.AmeshControllerImage,
 		ChartsPath:  filepath.Join(f.e2eHome, "../controller/charts/amesh-controller"),
@@ -222,12 +226,12 @@ func (f *Framework) beforeEach() {
 		//utils.AssertNil(f.cp.InjectNamespace(f.namespace), "inject namespace")
 	})
 	e.Add(func() {
-		log.Infof("creating namespace " + f.cpNamespace())
-		defer log.Infof("created namespace " + f.cpNamespace())
-		f.WaitForNamespaceDeletion(f.cpNamespace())
+		log.Infof("creating namespace " + f.ControlPlaneNamespace())
+		defer log.Infof("created namespace " + f.ControlPlaneNamespace())
+		f.WaitForNamespaceDeletion(f.ControlPlaneNamespace())
 
-		err := k8s.CreateNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace())
-		utils.AssertNil(err, "create namespace "+f.cpNamespace())
+		err := k8s.CreateNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.ControlPlaneNamespace())
+		utils.AssertNil(err, "create namespace "+f.ControlPlaneNamespace())
 	})
 	e.Wait()
 
@@ -243,8 +247,8 @@ func (f *Framework) afterEach() {
 	defer utils.LogTimeTrack(time.Now(), "=== Environment Cleaned (%v) ===")
 
 	defer func() {
-		log.Infof("delete namespace " + f.cpNamespace())
-		utils.AssertNil(k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.cpNamespace()), "delete namespace "+f.cpNamespace())
+		log.Infof("delete namespace " + f.ControlPlaneNamespace())
+		utils.AssertNil(k8s.DeleteNamespaceE(ginkgo.GinkgoT(), f.kubectlOpts, f.ControlPlaneNamespace()), "delete namespace "+f.ControlPlaneNamespace())
 
 		//utils.LogTimeTrack(started, "=== Environment Cleaned (%v) ===")
 	}()
@@ -291,7 +295,7 @@ func (f *Framework) dumpNamespace() {
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
 
-			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "-n", f.cpNamespace(), "get", "deploy,sts,rs,svc,pods")
+			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "-n", f.ControlPlaneNamespace(), "get", "deploy,sts,rs,svc,pods")
 			if output != "" {
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
@@ -310,7 +314,7 @@ func (f *Framework) dumpNamespace() {
 			}
 
 			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Describe Pods ==="))
-			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "-n", f.cpNamespace(), "describe", "pods")
+			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "-n", f.ControlPlaneNamespace(), "describe", "pods")
 			if output != "" {
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
@@ -320,7 +324,7 @@ func (f *Framework) dumpNamespace() {
 			}
 
 			// Logs
-			output = f.GetDeploymentLogs(f.cpNamespace(), "amesh-controller")
+			output = f.GetDeploymentLogs(f.ControlPlaneNamespace(), "amesh-controller")
 			if output != "" {
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}

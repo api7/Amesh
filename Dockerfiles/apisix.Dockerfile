@@ -19,13 +19,10 @@ FROM centos:7 as proxy-build-stage
 ADD nginx /nginx
 
 # Docker Build Arguments
-ARG APISIX_VERSION="2.13.0"
-ARG APISIX_MESH_AGENT_VERSION="0.0.1"
+ARG APISIX_VERSION="2.15.0"
 ARG ENABLE_PROXY=false
 ARG LUAROCKS_VERSION="3.4.0"
 ARG LUAROCKS_SERVER="https://luarocks.org"
-ARG RESTY_IMAGE_BASE="alpine"
-ARG RESTY_IMAGE_TAG="3.12"
 ARG RESTY_VERSION="1.19.9.1"
 ARG RESTY_OPENSSL_VERSION="1.1.1g"
 ARG RESTY_NGINX_VERSION="1.19.9"
@@ -71,8 +68,6 @@ ARG _RESTY_CONFIG_DEPS="--with-pcre \
     --with-ld-opt='-L/usr/local/openresty/pcre/lib -L/usr/local/openresty/openssl/lib -Wl,-rpath,/usr/local/openresty/pcre/lib:/usr/local/openresty/openssl/lib' \
     "
 
-LABEL resty_image_base="${RESTY_IMAGE_BASE}"
-LABEL resty_image_tag="${RESTY_IMAGE_TAG}"
 LABEL resty_version="${RESTY_VERSION}"
 LABEL resty_openssl_version="${RESTY_OPENSSL_VERSION}"
 LABEL resty_openssl_patch_version="${RESTY_OPENSSL_PATCH_VERSION}"

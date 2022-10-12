@@ -76,6 +76,7 @@ func NewGRPCController(GRPCServerAddr string, pluginConfigCache types.PodPluginC
 func (c *GRPCController) NotifyPodChange(updateEvent *types.UpdatePodPluginConfigEvent) {
 	for podName := range updateEvent.Pods {
 		// TODO: FIXME too many lock/unlock
+		// TODO: Update Pod Status/Generate event
 		c.Log.Info("Pod change event received", "pod", updateEvent.Namespace+"/"+podName)
 		instance := c.instanceManager.get(updateEvent.Namespace + "/" + podName)
 		if instance != nil {
@@ -153,6 +154,8 @@ func (c *GRPCController) StreamPlugins(req *protov1.PluginsRequest, srv protov1.
 		//	return c.sendPodPluginConfig(podKey, srv)
 		//},
 	}
+
+	// TODO: Update Pod Status/Generate event
 	c.instanceManager.add(podKey, instance)
 	defer c.instanceManager.delete(podKey)
 

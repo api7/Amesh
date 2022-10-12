@@ -44,11 +44,11 @@ build-amesh-so: create-bin-dir
 .PHONY: build-amesh-iptables-image
 build-amesh-iptables-image:
 ifeq ($(REQUIRE_REBUILD_IPTABLES_IMAGE), true)
-	ifeq ($(ENABLE_PROXY), true)
-		@docker build -f Dockerfiles/iptables.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
-	else
-		@docker build -f Dockerfiles/iptables.Dockerfile -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
-	endif
+ifeq ($(ENABLE_PROXY), true)
+	docker build -f Dockerfiles/iptables.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
+else
+	docker build -f Dockerfiles/iptables.Dockerfile -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
+endif
 else
 	# reuse pre-built image
 	docker pull api7/amesh-iptables:v0.0.2
@@ -58,17 +58,17 @@ endif
 .PHONY: build-amesh-standalone-image
 build-amesh-standalone-image:
 ifeq ($(ENABLE_PROXY), true)
-	@docker build -f Dockerfiles/standalone.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_STANDALONE_IMAGE):$(AMESH_STANDALONE_IMAGE_TAG) .
+	docker build -f Dockerfiles/standalone.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_STANDALONE_IMAGE):$(AMESH_STANDALONE_IMAGE_TAG) .
 else
-	@docker build -f Dockerfiles/standalone.Dockerfile -t $(AMESH_STANDALONE_IMAGE):$(AMESH_STANDALONE_IMAGE_TAG) .
+	docker build -f Dockerfiles/standalone.Dockerfile -t $(AMESH_STANDALONE_IMAGE):$(AMESH_STANDALONE_IMAGE_TAG) .
 endif
 
 .PHONY: build-amesh-so-image
 build-amesh-so-image:
 ifeq ($(ENABLE_PROXY), true)
-	@docker build -f Dockerfiles/luajit.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_SO_IMAGE):$(AMESH_SO_IMAGE_TAG) .
+	docker build -f Dockerfiles/luajit.Dockerfile --build-arg ENABLE_PROXY=true -t $(AMESH_SO_IMAGE):$(AMESH_SO_IMAGE_TAG) .
 else
-	@docker build -f Dockerfiles/luajit.Dockerfile -t $(AMESH_SO_IMAGE):$(AMESH_SO_IMAGE_TAG) .
+	docker build -f Dockerfiles/luajit.Dockerfile -t $(AMESH_SO_IMAGE):$(AMESH_SO_IMAGE_TAG) .
 endif
 
 .PHONY: build-apisix-image
@@ -93,8 +93,10 @@ ifeq ($(REQUIRE_REBUILD_CONTROLLER_IMAGE), true)
 	cd controller && \
 	make docker-build
 else
-	# reuse pre-built image
-	docker pull api7/amesh-controller:latest
+	cd controller && \
+	make docker-build
+#	# reuse pre-built image
+#	docker pull api7/amesh-controller:latest
 endif
 	docker tag amesh-controller:latest $(REGISTRY)/amesh-controller:latest
 

@@ -4,20 +4,21 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//    http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
 package amesh
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -130,6 +131,53 @@ func (g *Agent) Run(stop <-chan struct{}) error {
 			g.logger.Fatalw("provisioner run failed",
 				zap.Error(err),
 			)
+		}
+	}()
+
+	go func() {
+		portStr := os.Getenv("STATUS_SERVER_PORT")
+		if portStr == "" {
+			// Do not start status server
+			g.logger.Infof("STATUS_SERVER_PORT is empty, status server won't start")
+			return
+		}
+		port := 9999
+		parsed, err := strconv.ParseInt(portStr, 10, 32)
+		if err != nil {
+			g.logger.Fatalw("failed to parse status server port, using default",
+				zap.Error(err),
+				zap.String("value", portStr),
+			)
+		} else {
+			port = int(parsed)
+		}
+		http.HandleFunc("/status", func(writer http.ResponseWriter, request *http.Request) {
+			status, err := g.provisioner.Status()
+			if err != nil {
+				writer.WriteHeader(http.StatusInternalServerError)
+				_, writeErr := writer.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
+				if writeErr != nil {
+					g.logger.Fatalw("failed to write status",
+						zap.Error(writeErr),
+					)
+				}
+				return
+			}
+			writer.WriteHeader(http.StatusOK)
+			_, err = writer.Write([]byte(status))
+			if err != nil {
+				g.logger.Fatalw("failed to write status",
+					zap.Error(err),
+				)
+			}
+			return
+		})
+		err = http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
+		if err != nil {
+			g.logger.Fatalw("failed to run status server",
+				zap.Error(err),
+			)
+			return
 		}
 	}()
 
