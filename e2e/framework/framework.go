@@ -42,8 +42,6 @@ func init() {
 type ManifestArgs struct {
 	// Public arguments to render manifests.
 	LocalRegistry string
-
-	HttpBinReplicas int
 }
 
 type Framework struct {
@@ -61,8 +59,6 @@ type Framework struct {
 	cp        controlplane.ControlPlane
 	amesh     ameshcontroller.AmeshController
 	namespace string
-
-	httpbinReady bool
 }
 
 type Options struct {
@@ -111,8 +107,7 @@ func NewFramework(opts *Options) *Framework {
 	}
 
 	args := &ManifestArgs{
-		LocalRegistry:   os.Getenv("REGISTRY"),
-		HttpBinReplicas: 1,
+		LocalRegistry: os.Getenv("REGISTRY"),
 	}
 	if args.LocalRegistry == "" {
 		args.LocalRegistry = "localhost:5000"
@@ -198,9 +193,6 @@ func (f *Framework) deploy() {
 		utils.AssertNil(f.amesh.WaitForReady(), "wait amesh-controller")
 	})
 	e.Wait()
-
-	f.newHttpBin()
-	f.waitForHttpbinReady()
 }
 
 func (f *Framework) beforeEach() {

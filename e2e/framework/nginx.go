@@ -29,17 +29,23 @@ import (
 )
 
 const (
-	nginxConfTemplate = `
-server {
-	listen 80;
-	server_name test.com;
-	location / {
-		proxy_pass http://%s;
-		proxy_set_header Host %s;
-		proxy_http_version 1.1;
-		proxy_set_header Connection "";
-	}
-}
+	nginxConfigMap = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: %s
+data:
+  proxy.conf: |
+    server {
+        listen 80;
+        server_name test.com;
+        location / {
+            proxy_pass http://%s;
+            proxy_set_header Host %s;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+        }
+    }
 `
 
 	nginxTemplate = `
@@ -90,7 +96,7 @@ spec:
     protocol: TCP`
 )
 
-type renderArgs struct {
+type nginxRenderArgs struct {
 	*ManifestArgs
 	Name      string
 	ConfigMap string
@@ -107,15 +113,24 @@ func (f *Framework) CreateNginxInMeshTo(svc string, waitReady bool) string {
 	return f.createNginxTo(svc, true, waitReady)
 }
 
+func (f *Framework) MakeNginxInsideMesh(name, svc string, waitReady bool) {
+	f.applyNginx(name, svc, true, waitReady)
+}
+
 func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) string {
-
-	conf := fmt.Sprintf(nginxConfTemplate, svc, svc)
-
 	randomName := fmt.Sprintf("ngx-%d", time.Now().Nanosecond())
 
-	utils.AssertNil(f.CreateConfigMap(randomName, "proxy.conf", conf), "create config map "+randomName)
+	f.applyNginx(randomName, svc, inMesh, waitReady)
 
-	args := &renderArgs{
+	return randomName
+}
+
+func (f *Framework) applyNginx(randomName, svc string, inMesh bool, waitReady bool) {
+	conf := fmt.Sprintf(nginxConfigMap, randomName, svc, svc)
+
+	utils.AssertNil(f.CreateResourceFromString(conf), "create config map "+randomName)
+
+	args := &nginxRenderArgs{
 		ManifestArgs: f.args,
 		Name:         randomName,
 		ConfigMap:    randomName,
@@ -133,19 +148,19 @@ func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) strin
 		f.WaitForNginxReady(randomName)
 	}
 
-	return randomName
+	return
 }
 
 func (f *Framework) WaitForNginxReady(name string) {
 	log.Infof("wait for nginx ready")
 	defer utils.LogTimeTrack(time.Now(), "nginx ready (%v)")
-	utils.AssertNil(f.WaitForPodsReady(name), "wait for nginx ready")
+	utils.AssertNil(f.WaitForDeploymentPodsReady(name), "wait for nginx ready")
 }
 
 // NewHTTPClientToNginx creates a http client which sends requests to
 // nginx.
-func (f *Framework) NewHTTPClientToNginx(name string) *httpexpect.Expect {
-	endpoint := f.buildTunnelToNginx(name)
+func (f *Framework) NewHTTPClientToNginx(name string) (*httpexpect.Expect, *k8s.Tunnel) {
+	endpoint, tunnel := f.buildTunnelToNginx(name)
 	u := url.URL{
 		Scheme: "http",
 		Host:   endpoint,
@@ -159,15 +174,15 @@ func (f *Framework) NewHTTPClientToNginx(name string) *httpexpect.Expect {
 			},
 		},
 		Reporter: httpexpect.NewAssertReporter(httpexpect.NewAssertReporter(ginkgo.GinkgoT())),
-	})
+	}), tunnel
 }
 
-func (f *Framework) buildTunnelToNginx(name string) string {
+func (f *Framework) buildTunnelToNginx(name string) (string, *k8s.Tunnel) {
 	tunnel := k8s.NewTunnel(f.kubectlOpts, k8s.ResourceTypeService, name, 12384, 80)
 	err := tunnel.ForwardPortE(ginkgo.GinkgoT())
 	utils.AssertNil(err, "port-forward nginx tunnel")
 
 	f.tunnels = append(f.tunnels, tunnel)
 
-	return tunnel.Endpoint()
+	return tunnel.Endpoint(), tunnel
 }

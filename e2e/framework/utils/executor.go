@@ -52,6 +52,22 @@ func NewParallelExecutor(name string) *parallelExecutor {
 	}
 }
 
+func ParallelRunAndWait(handlers ...func()) {
+	exec := NewParallelExecutor("")
+	for _, handler := range handlers {
+		exec.Add(handler)
+	}
+	exec.Wait()
+}
+
+func ParallelRunFunctionsAndWait(handlersArray ...[]func()) {
+	exec := NewParallelExecutor("")
+	for _, handlers := range handlersArray {
+		exec.Add(handlers...)
+	}
+	exec.Wait()
+}
+
 func (exec *parallelExecutor) Add(handlers ...func()) {
 	exec.wg.Add(1)
 	go func() {

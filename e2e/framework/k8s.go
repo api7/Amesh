@@ -68,7 +68,9 @@ func (f *Framework) DeleteResource(resourceType, namespace string, args ...strin
 	cmd = append(cmd, args...)
 	err := k8s.RunKubectlE(f.t, f.kubectlOpts, cmd...)
 
-	log.Info("executing command: kubectl " + strings.Join(cmd, " "))
+	log.SkipFrames(1)
+	defer log.SkipFrames(-1)
+	log.Info("Executing command: kubectl " + strings.Join(cmd, " "))
 	if err != nil {
 		log.Errorw("delete resource failed",
 			zap.Error(err),
@@ -82,6 +84,8 @@ func (f *Framework) DeleteResource(resourceType, namespace string, args ...strin
 
 // DeletePod deletes a Kubernetes pod from the given namespace and name.
 func (f *Framework) DeletePod(namespace, name string) error {
+	log.SkipFrames(1)
+	defer log.SkipFrames(-1)
 	err := f.DeleteResource("pod", namespace, name)
 	return err
 }
@@ -92,11 +96,15 @@ func (f *Framework) DeletePodByLabel(namespace string, labels ...string) error {
 	for _, label := range labels {
 		labelArgs = append(labelArgs, "-l", label)
 	}
+	log.SkipFrames(1)
+	defer log.SkipFrames(-1)
 	err := f.DeleteResource("pod", namespace, labelArgs...)
 	return err
 }
 
 func (f *Framework) WaitForServiceReady(ns, name string) (string, error) {
+	log.SkipFrames(1)
+	defer log.SkipFrames(-1)
 	return utils.WaitForServiceReady(f.kubectlOpts, ns, name)
 }
 
@@ -161,99 +169,15 @@ func (f *Framework) WaitForPodsReady(name string) error {
 	return utils.WaitExponentialBackoff(condFunc)
 }
 
-const (
-	failureToleration = 10
-)
-
 func (f *Framework) WaitForDeploymentPodsReady(name string, namespace ...string) error {
-	opts := metav1.ListOptions{
-		LabelSelector: "app=" + name,
-	}
-
 	ns := f.kubectlOpts.Namespace
 	if len(namespace) > 0 {
 		ns = namespace[0]
 	}
 
-	deploymentFailures := 0
-	podFailures := 0
-	condFunc := func() (bool, error) {
-		if (deploymentFailures + podFailures) >= 2*failureToleration {
-			log.Warnf("waiting %s pods... (%v times)", name, deploymentFailures+podFailures)
-		} else {
-			log.Debugf("waiting %s pods...", name)
-		}
-
-		items, err := k8s.ListPodsE(ginkgo.GinkgoT(), &k8s.KubectlOptions{
-			ContextName:   f.kubectlOpts.ContextName,
-			ConfigPath:    f.kubectlOpts.ConfigPath,
-			Namespace:     ns,
-			Env:           f.kubectlOpts.Env,
-			InClusterAuth: f.kubectlOpts.InClusterAuth,
-		}, opts)
-		if err != nil {
-			return false, err
-		}
-		if len(items) == 0 {
-			if deploymentFailures >= failureToleration {
-				log.Warnf("no %s pods created (%v times)", name, deploymentFailures)
-			} else {
-				log.Debugf("no %s pods created", name)
-			}
-			deploymentFailures++
-			clientset, err := k8s.GetKubernetesClientFromOptionsE(ginkgo.GinkgoT(), f.kubectlOpts)
-			if err != nil {
-				return false, err
-			}
-
-			deployments, err := clientset.AppsV1().Deployments(f.kubectlOpts.Namespace).List(context.Background(), opts)
-			if err != nil {
-				return false, err
-			}
-			if len(deployments.Items) == 0 {
-				log.Debugf("no %s deployment created", name)
-				return false, nil
-			}
-			for _, deployment := range deployments.Items {
-				for _, cond := range deployment.Status.Conditions {
-					if deploymentFailures >= failureToleration {
-						log.Warnf("%v: %v", deployment.Name, cond.Message)
-					} else {
-						log.Debugf("%v: %v", deployment.Name, cond.Message)
-					}
-				}
-			}
-			return false, nil
-		}
-		defer func() { podFailures++ }()
-		for _, pod := range items {
-			found := false
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type != corev1.PodReady {
-					if podFailures >= failureToleration {
-						log.Warnf("pod %s type %s status %s: %s", pod.Name, cond.Type, cond.Status, cond.Message)
-					} else {
-						log.Debugf("pod %s cond %s", pod.Name, cond.Type)
-					}
-					continue
-				}
-				found = true
-				if cond.Status != corev1.ConditionTrue {
-					if podFailures >= failureToleration {
-						log.Warnf("pod %s type %s status %s: %s", pod.Name, cond.Type, cond.Status, cond.Message)
-					} else {
-						log.Debugf("pod %s status %s", pod.Name, cond.Status)
-					}
-					return false, nil
-				}
-			}
-			if !found {
-				return false, nil
-			}
-		}
-		return true, nil
-	}
-	return utils.WaitExponentialBackoff(condFunc)
+	log.SkipFrames(1)
+	defer log.SkipFrames(-1)
+	return utils.WaitForDeploymentPodsReady(f.kubectlOpts, ns, name)
 }
 
 func (f *Framework) WaitForAmeshPluginConfigEvents(name string, typ string, status metav1.ConditionStatus) error {

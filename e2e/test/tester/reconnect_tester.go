@@ -15,8 +15,6 @@
 package tester
 
 import (
-	"time"
-
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
@@ -51,9 +49,13 @@ func (t *ReconnectTester) Create() {
 }
 
 func (t *ReconnectTester) ValidateStatusAmeshIsOK() {
-	time.Sleep(time.Second * 5)
-	assert.Equal(ginkgo.GinkgoT(), t.f.GetSidecarStatus(t.curlPod).AmeshConnected, true, "amesh should connected")
-	assert.Equal(ginkgo.GinkgoT(), t.f.GetSidecarStatus(t.curlPod).AmeshProvisionerReady, true, "amesh provisioner should ready")
+	condFunc := func() (bool, error) {
+		return t.f.GetSidecarStatus(t.curlPod).AmeshConnected, nil
+	}
+	_ = utils.WaitExponentialBackoff(condFunc) // ignore timeout error
+
+	assert.Equal(ginkgo.GinkgoT(), true, t.f.GetSidecarStatus(t.curlPod).AmeshConnected, "amesh should connected")
+	assert.Equal(ginkgo.GinkgoT(), true, t.f.GetSidecarStatus(t.curlPod).AmeshProvisionerReady, "amesh provisioner should ready")
 }
 
 func (t *ReconnectTester) DeleteAmeshController() {
