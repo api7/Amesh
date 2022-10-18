@@ -157,8 +157,9 @@ func (g *Agent) Run(stop <-chan struct{}) error {
 				writer.WriteHeader(http.StatusInternalServerError)
 				_, writeErr := writer.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
 				if writeErr != nil {
-					g.logger.Fatalw("failed to write status",
+					g.logger.Fatalw("failed to write /status error",
 						zap.Error(writeErr),
+						zap.NamedError("status_error", err),
 					)
 				}
 				return
@@ -167,6 +168,50 @@ func (g *Agent) Run(stop <-chan struct{}) error {
 			_, err = writer.Write([]byte(status))
 			if err != nil {
 				g.logger.Fatalw("failed to write status",
+					zap.Error(err),
+				)
+			}
+			return
+		})
+		http.HandleFunc("/routes", func(writer http.ResponseWriter, request *http.Request) {
+			routes, err := g.provisioner.GetData("routes")
+			if err != nil {
+				writer.WriteHeader(http.StatusInternalServerError)
+				_, writeErr := writer.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
+				if writeErr != nil {
+					g.logger.Fatalw("failed to write /routes error",
+						zap.Error(writeErr),
+						zap.NamedError("routes_error", err),
+					)
+				}
+				return
+			}
+			writer.WriteHeader(http.StatusOK)
+			_, err = writer.Write([]byte(routes))
+			if err != nil {
+				g.logger.Fatalw("failed to write routes",
+					zap.Error(err),
+				)
+			}
+			return
+		})
+		http.HandleFunc("/upstreams", func(writer http.ResponseWriter, request *http.Request) {
+			upstreams, err := g.provisioner.GetData("upstreams")
+			if err != nil {
+				writer.WriteHeader(http.StatusInternalServerError)
+				_, writeErr := writer.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
+				if writeErr != nil {
+					g.logger.Fatalw("failed to write /upstreams error",
+						zap.Error(writeErr),
+						zap.NamedError("routes_error", err),
+					)
+				}
+				return
+			}
+			writer.WriteHeader(http.StatusOK)
+			_, err = writer.Write([]byte(upstreams))
+			if err != nil {
+				g.logger.Fatalw("failed to write upstreams",
 					zap.Error(err),
 				)
 			}

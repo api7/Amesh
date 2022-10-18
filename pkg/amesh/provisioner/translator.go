@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/api7/amesh/pkg/amesh/types"
 	"github.com/api7/amesh/pkg/apisix"
 )
 
@@ -34,7 +35,7 @@ func (p *xdsProvisioner) processRouteConfigurationV3(res *any.Any) ([]*apisix.Ro
 		DiscardUnknown: true,
 	})
 
-	p.logger.Debugw("got route response",
+	p.logger.Debugw("process route configurations",
 		zap.Any("route", &route),
 	)
 
@@ -62,7 +63,7 @@ func (p *xdsProvisioner) processStaticRouteConfigurations(rcs []*routev3.RouteCo
 		routes []*apisix.Route
 	)
 	for _, rc := range rcs {
-		p.logger.Debugw("got static route response",
+		p.logger.Debugw("process static route configurations",
 			zap.Any("static_route", rc),
 		)
 		route, err := p.TranslateRouteConfiguration(rc, p.routeOwnership)
@@ -89,7 +90,7 @@ func (p *xdsProvisioner) processClusterV3(res *any.Any) (*apisix.Upstream, error
 		)
 		return nil, err
 	}
-	p.logger.Debugw("got cluster response",
+	p.logger.Debugw("process cluster configurations",
 		zap.Any("cluster", &cluster),
 	)
 
@@ -111,7 +112,7 @@ func (p *xdsProvisioner) processClusterLoadAssignmentV3(cla *endpointv3.ClusterL
 	}
 
 	nodes, err := p.TranslateClusterLoadAssignment(cla)
-	if err == ErrorRequireFurtherEDS {
+	if err == types.ErrorRequireFurtherEDS {
 		return nil, err
 	}
 	if err != nil {
@@ -134,6 +135,5 @@ func (p *xdsProvisioner) processClusterLoadAssignmentV3(cla *endpointv3.ClusterL
 	}
 
 	newUps.Nodes = nodes
-	p.upstreams[cla.ClusterName] = &newUps
 	return &newUps, nil
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/api7/amesh/pkg/apisix"
 )
 
+// TranslateCluster generates ApisixUpstream from Cluster
 func (p *xdsProvisioner) TranslateCluster(c *clusterv3.Cluster) (*apisix.Upstream, error) {
 	ups := &apisix.Upstream{
 		Name:  c.Name,
@@ -45,6 +46,7 @@ func (p *xdsProvisioner) TranslateCluster(c *clusterv3.Cluster) (*apisix.Upstrea
 	return ups, nil
 }
 
+// translateClusterLbPolicy generates load balance Type settings for ApisixUpstream from Cluster
 func (p *xdsProvisioner) translateClusterLbPolicy(c *clusterv3.Cluster, ups *apisix.Upstream) error {
 	switch c.GetLbPolicy() {
 	case clusterv3.Cluster_ROUND_ROBIN:
@@ -67,6 +69,7 @@ func (p *xdsProvisioner) translateClusterLbPolicy(c *clusterv3.Cluster, ups *api
 	return nil
 }
 
+// translateClusterTimeoutSettings generates Timeout settings for ApisixUpstream from Cluster
 func (p *xdsProvisioner) translateClusterTimeoutSettings(c *clusterv3.Cluster, ups *apisix.Upstream) error {
 	if c.GetConnectTimeout() != nil {
 		ups.Timeout = &apisix.Timeout{
@@ -78,6 +81,7 @@ func (p *xdsProvisioner) translateClusterTimeoutSettings(c *clusterv3.Cluster, u
 	return nil
 }
 
+// translateClusterLoadAssignments generates Nodes for ApisixUpstream from Cluster.LoadAssignment
 func (p *xdsProvisioner) translateClusterLoadAssignments(c *clusterv3.Cluster, ups *apisix.Upstream) error {
 	if c.GetClusterType() != nil {
 		p.logger.Warnw("ignore cluster with unsupported cluster type",

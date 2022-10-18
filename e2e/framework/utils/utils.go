@@ -101,7 +101,7 @@ func WaitForDeploymentPodsReady(kubectlOpts *k8s.KubectlOptions, namespace, name
 			log.Debugf("waiting %s pods...", name)
 		}
 
-		items, err := k8s.ListPodsE(ginkgo.GinkgoT(), &k8s.KubectlOptions{
+		allItems, err := k8s.ListPodsE(ginkgo.GinkgoT(), &k8s.KubectlOptions{
 			ContextName:   kubectlOpts.ContextName,
 			ConfigPath:    kubectlOpts.ConfigPath,
 			Namespace:     namespace,
@@ -111,6 +111,14 @@ func WaitForDeploymentPodsReady(kubectlOpts *k8s.KubectlOptions, namespace, name
 		if err != nil {
 			return false, err
 		}
+
+		var items []corev1.Pod
+		for _, item := range allItems {
+			if item.DeletionTimestamp == nil {
+				items = append(items, item)
+			}
+		}
+
 		if len(items) == 0 {
 			if deploymentFailures >= failureToleration {
 				log.Warnf("no %s pods created (%v times)", name, deploymentFailures)
@@ -238,6 +246,13 @@ func Case(name string, f func()) {
 
 func FCase(name string, f func()) {
 	ginkgo.FIt(name, caseWrapper(name, f), ginkgo.Offset(1))
+}
+
+func SCase(name string, f func()) {
+	ginkgo.It(name, caseWrapper(name, func() {
+		ginkgo.Skip("Temporary Skip")
+		f()
+	}), ginkgo.Offset(1))
 }
 
 func IgnorePanic(f func()) {

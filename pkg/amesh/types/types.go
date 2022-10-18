@@ -13,6 +13,12 @@
 // limitations under the License.
 package types
 
+import "errors"
+
+var (
+	ErrorRequireFurtherEDS = errors.New("require further eds")
+)
+
 var (
 	// RouteConfigurationUrl is the RDS type url.
 	RouteConfigurationUrl = "type.googleapis.com/envoy.config.route.v3.RouteConfiguration"
@@ -33,6 +39,8 @@ type Provisioner interface {
 	Run(<-chan struct{}) error
 	// Status returns the provisioner status
 	Status() (string, error)
+	// GetData returns the specific data for status server
+	GetData(dataType string) (string, error)
 }
 
 // EventType is the kind of event.
