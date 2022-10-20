@@ -181,7 +181,7 @@ func (p *xdsProvisioner) GetData(dataType string) (string, error) {
 		}
 		p.routesLock.RUnlock()
 
-		data, err := json.Marshal(routes)
+		data, err := json.MarshalIndent(routes, "", "  ")
 		if err != nil {
 			return "", err
 		}
@@ -194,7 +194,7 @@ func (p *xdsProvisioner) GetData(dataType string) (string, error) {
 		}
 		p.upstreamsLock.RUnlock()
 
-		data, err := json.Marshal(upstreams)
+		data, err := json.MarshalIndent(upstreams, "", "  ")
 		if err != nil {
 			return "", err
 		}
@@ -303,27 +303,56 @@ func (p *xdsProvisioner) run(stop <-chan struct{}, conn *grpc.ClientConn) error 
 	go p.translateLoop(stop)
 	go p.firstSend()
 
+	go func() {
+		timer := time.NewTimer(time.Second * 10)
+		for {
+			select {
+			case <-stop:
+				return
+			case <-timer.C:
+				dr := &discoveryv3.DiscoveryRequest{
+					Node:    p.node,
+					TypeUrl: types.ClusterUrl,
+				}
+				p.logger.Debugw(color.BlueString("sending periodic sync discovery request"),
+					zap.String("type_url", dr.TypeUrl),
+				)
+				p.sendCh <- dr
+				timer.Reset(time.Second * 10)
+			}
+		}
+	}()
+
 	p.ready = true
 	return nil
 }
 
 func (p *xdsProvisioner) firstSend() {
-	dr1 := &discoveryv3.DiscoveryRequest{
-		Node:    p.node,
-		TypeUrl: types.ListenerUrl,
+	drs := []*discoveryv3.DiscoveryRequest{
+		{
+			Node:    p.node,
+			TypeUrl: types.ListenerUrl,
+		},
+		{
+			Node:    p.node,
+			TypeUrl: types.ClusterUrl,
+		},
+		//{
+		//	Node:    p.node,
+		//	TypeUrl: types.RouteConfigurationUrl,
+		//},
+		//{
+		//	Node:    p.node,
+		//	TypeUrl: types.ClusterLoadAssignmentUrl,
+		//},
 	}
-	dr2 := &discoveryv3.DiscoveryRequest{
-		Node:    p.node,
-		TypeUrl: types.ClusterUrl,
-	}
-	//dr3 := &discoveryv3.DiscoveryRequest{
-	//	Node:    p.node,
-	//	TypeUrl: types.RouteConfigurationUrl,
-	//}
 
-	p.sendCh <- dr1
-	p.sendCh <- dr2
-	p.logger.Debugw("sent initial discovery requests for listeners and clusters")
+	for _, dr := range drs {
+		p.logger.Debugw("sending initial discovery request",
+			zap.String("type_url", dr.TypeUrl),
+		)
+		p.sendCh <- dr
+	}
 }
 
 // sendLoop receives pending DiscoveryRequest objects and sends them to client.
@@ -425,6 +454,9 @@ func (p *xdsProvisioner) ignoreEds(clusterName string) bool {
 	xdsSrc = strings.TrimPrefix(xdsSrc, "grpc://")
 	xdsSrc = strings.Split(xdsSrc, ":")[0]
 	ignoredClusterNames := []string{
+		"BlackHoleCluster",
+		"PassthroughCluster",
+		"InboundPassthroughCluster", // InboundPassthroughClusterIpv4
 		"kubernetes.default.svc.cluster.local",
 		"kube-system.svc.cluster.local",
 		"istio-system.svc.cluster.local",
@@ -497,14 +529,18 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 				)
 				continue
 			}
-			p.logger.Debugw("got cluster response",
+			p.logger.Debugw(color.GreenString("process cluster response"),
 				zap.Any("cluster", &cluster),
 			)
 
 			ups, err := p.TranslateCluster(&cluster)
 			if err != nil {
 				if err == types.ErrorRequireFurtherEDS {
-					p.edsRequiredClusters.Add(cluster.Name)
+					ignored := p.ignoreEds(cluster.Name)
+
+					if !ignored {
+						p.edsRequiredClusters.Add(cluster.Name)
+					}
 					p.logger.Debugw(color.CyanString("require further EDS"),
 						zap.Any("cluster", res),
 					)
@@ -518,22 +554,34 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			}
 			if cluster.GetType() == clusterv3.Cluster_EDS {
 				p.edsRequiredClusters.Add(cluster.Name)
+
+				// use old upstream to avoid empty Nodes before EDS request returns
+				// otherwise, every Cluster process, the Nodes will be deleted,
+				// and every CLA process, the Nodes wll be generated
+				if oldUps, ok := p.upstreams[cluster.Name]; ok && len(oldUps.Nodes) > 0 {
+					newManifest.Upstreams = append(newManifest.Upstreams, oldUps)
+				}
+			} else if len(ups.Nodes) > 0 {
+				newManifest.Upstreams = append(newManifest.Upstreams, ups)
 			}
-			newManifest.Upstreams = append(newManifest.Upstreams, ups)
 			newUps[ups.Name] = ups
 		}
 		// TODO Refactor util.Manifest to just use map.
 		for _, ups := range p.upstreams {
-			oldManifest.Upstreams = append(oldManifest.Upstreams, ups)
+			if len(ups.Nodes) > 0 {
+				oldManifest.Upstreams = append(oldManifest.Upstreams, ups)
+			}
 		}
 		p.upstreams = newUps
-		if !p.edsRequiredClusters.Equals(oldEdsRequiredClusters) {
-			p.logger.Infow("new EDS discovery request",
-				zap.Any("old_eds_required_clusters", oldEdsRequiredClusters),
-				zap.Any("eds_required_clusters", p.edsRequiredClusters),
-			)
-			go p.sendEds(p.edsRequiredClusters)
-		}
+
+		// We don't have any cache-invalidate mechanics yet, so shouldn't check it
+		//if !p.edsRequiredClusters.Equals(oldEdsRequiredClusters) {
+		p.logger.Infow("new EDS discovery request",
+			zap.Any("old_eds_required_clusters", oldEdsRequiredClusters),
+			zap.Any("eds_required_clusters", p.edsRequiredClusters),
+		)
+		go p.sendEds(p.edsRequiredClusters)
+		//}
 	case types.ClusterLoadAssignmentUrl:
 		requireFurtherEds := util.StringSet{}
 
@@ -552,7 +600,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 				continue
 			}
 
-			p.logger.Debugw("got cluster load assignment response",
+			p.logger.Debugw(color.GreenString("process cluster load assignment response"),
 				zap.Any("cla", &cla),
 			)
 
@@ -599,7 +647,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 				continue
 			}
 
-			p.logger.Debugw("got listener response",
+			p.logger.Debugw(color.GreenString("process listener response"),
 				zap.Any("listener", &listener),
 			)
 
@@ -640,6 +688,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 
 	// Always generate update event for EDS.
 	if resp.GetTypeUrl() == types.ClusterLoadAssignmentUrl {
+		p.logger.Debugw("refresh ClusterLoadAssignment endpoints")
 		for _, ups := range newManifest.Upstreams {
 			events = append(events, types.Event{
 				Type:   types.EventUpdate,

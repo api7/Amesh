@@ -90,7 +90,7 @@ func (f *Framework) newHttpBin(name string, inMesh bool) {
 	utils.AssertNil(err, "apply httpbin %s", name)
 }
 
-func (f *Framework) CreateHttpbin(nameOpt ...string) {
+func (f *Framework) CreateHttpbinInMesh(nameOpt ...string) {
 	name := "httpbin"
 	if len(nameOpt) > 0 {
 		name = nameOpt[0]

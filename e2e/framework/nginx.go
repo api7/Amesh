@@ -117,6 +117,10 @@ func (f *Framework) MakeNginxInsideMesh(name, svc string, waitReady bool) {
 	f.applyNginx(name, svc, true, waitReady)
 }
 
+func (f *Framework) MakeNginxOutsideMesh(name, svc string, waitReady bool) {
+	f.applyNginx(name, svc, false, waitReady)
+}
+
 func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) string {
 	randomName := fmt.Sprintf("ngx-%d", time.Now().Nanosecond())
 

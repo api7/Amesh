@@ -15,10 +15,13 @@
 package base
 
 import (
+	"net/http"
+	"time"
+
 	"github.com/api7/gopkg/pkg/log"
+	"github.com/fatih/color"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
-	"net/http"
 
 	"github.com/api7/amesh/e2e/framework"
 	"github.com/api7/amesh/e2e/framework/utils"
@@ -33,7 +36,7 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		ngxName := ""
 
 		utils.ParallelRunAndWait(func() {
-			f.CreateHttpbin()
+			f.CreateHttpbinInMesh()
 			f.WaitForHttpbinReady()
 		}, func() {
 			ngxName = f.CreateNginxOutsideMeshTo(f.GetHttpBinServiceFQDN(), true)
@@ -58,7 +61,7 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		ngxName := ""
 
 		utils.ParallelRunAndWait(func() {
-			f.CreateHttpbin()
+			f.CreateHttpbinInMesh()
 			f.WaitForHttpbinReady()
 		}, func() {
 			ngxName = f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(), true)
@@ -97,6 +100,134 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		})
 
 		output := f.CurlInPod(curl, ngxName+"/ip")
+
+		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
+		assert.NotContains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+	})
+
+	utils.Case("inside mesh curl should be able to access inside mesh after pod deletion", func() {
+		// Inside Curl -> (Inside NGINX -> Outside HTTPBIN)
+		// Delete Inside NGINX and make it restart
+
+		ngxName := ""
+
+		httpbinName := "httpbin-outside"
+		f.CreateHttpbinOutsideMesh(httpbinName)
+
+		svc := f.GetHttpBinServiceFQDN(httpbinName)
+		ngxName = f.CreateNginxInMeshTo(svc, false)
+
+		curl := f.CreateCurl()
+
+		utils.ParallelRunAndWait(func() {
+			f.WaitForNginxReady(ngxName)
+		}, func() {
+			f.WaitForHttpbinReady(httpbinName)
+		}, func() {
+			f.WaitForCurlReady(curl)
+		})
+		time.Sleep(time.Second * 5)
+
+		output := f.CurlInPod(curl, ngxName+"/ip")
+
+		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+
+		//time.Sleep(time.Hour)
+		// Delete the pod
+		log.Infof(color.BlueString("Delete " + ngxName + " pods"))
+		utils.AssertNil(f.DeletePodByLabel(f.AppNamespace(), "app="+ngxName), "delete nginx pods")
+		f.WaitForNginxReady(ngxName)
+		time.Sleep(time.Second * 5)
+		output = f.CurlInPod(curl, ngxName+"/ip")
+
+		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+	})
+
+	utils.Case("inside mesh curl should be able to access outside->inside mesh", func() {
+		// Inside Curl -> (Outside NGINX -> Outside HTTPBIN)
+		// ->
+		// Inside Curl -> (Inside NGINX -> Outside HTTPBIN)
+
+		ngxName := ""
+
+		httpbinName := "httpbin-outside"
+		f.CreateHttpbinOutsideMesh(httpbinName)
+
+		svc := f.GetHttpBinServiceFQDN(httpbinName)
+		ngxName = f.CreateNginxOutsideMeshTo(svc, false)
+
+		curl := f.CreateCurl()
+
+		utils.ParallelRunAndWait(func() {
+			f.WaitForNginxReady(ngxName)
+		}, func() {
+			f.WaitForHttpbinReady(httpbinName)
+		}, func() {
+			f.WaitForCurlReady(curl)
+		})
+		time.Sleep(time.Second * 5)
+
+		output := f.CurlInPod(curl, ngxName+"/ip")
+
+		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
+		assert.NotContains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+
+		// Make the ngx inside mesh
+		log.Infof(color.BlueString("Make " + ngxName + " in mesh"))
+		f.MakeNginxInsideMesh(ngxName, svc, true)
+		f.WaitForNginxReady(ngxName)
+
+		time.Sleep(time.Second * 5)
+		output = f.CurlInPod(curl, ngxName+"/ip")
+
+		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+	})
+
+	utils.Case("inside mesh curl should be able to access inside->outside mesh", func() {
+		// Inside Curl -> (Inside NGINX -> Outside HTTPBIN)
+		// ->
+		// Inside Curl -> (Outside NGINX -> Outside HTTPBIN)
+
+		ngxName := ""
+
+		httpbinName := "httpbin-outside"
+		f.CreateHttpbinOutsideMesh(httpbinName)
+
+		svc := f.GetHttpBinServiceFQDN(httpbinName)
+		ngxName = f.CreateNginxInMeshTo(svc, false)
+
+		curl := f.CreateCurl()
+
+		utils.ParallelRunAndWait(func() {
+			f.WaitForNginxReady(ngxName)
+		}, func() {
+			f.WaitForHttpbinReady(httpbinName)
+		}, func() {
+			f.WaitForCurlReady(curl)
+		})
+		time.Sleep(time.Second * 5)
+
+		output := f.CurlInPod(curl, ngxName+"/ip")
+
+		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+
+		// Make the ngx outside mesh
+		log.Infof(color.BlueString("Make " + ngxName + " in mesh"))
+		f.MakeNginxOutsideMesh(ngxName, svc, true)
+		f.WaitForNginxReady(ngxName)
+
+		time.Sleep(time.Second * 5)
+		output = f.CurlInPod(curl, ngxName+"/ip")
 
 		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
 		assert.NotContains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")

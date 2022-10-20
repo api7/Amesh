@@ -26,6 +26,7 @@ import (
 	"unsafe"
 
 	"github.com/api7/gopkg/pkg/log"
+	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
@@ -81,6 +82,8 @@ func getIpAddr() (string, error) {
 }
 
 func NewAgent(ctx context.Context, src, ameshGrpc string, dataZone, versionZone unsafe.Pointer, logLevel, logOutput string) (*Agent, error) {
+	color.NoColor = false
+
 	ipAddr, err := getIpAddr()
 	if err != nil {
 		return nil, err
@@ -249,11 +252,14 @@ func (g *Agent) storeEvents(events []types.Event) {
 	}
 	timestamp := strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10)
 
-	g.logger.Debugw("store new events: begin")
+	g.logger.Debugw(color.BlueString("store new events: begin"))
 	for _, event := range events {
 		key := event.Key
 		if event.Type == types.EventDelete {
 			g.DataStorage.Delete(key)
+			g.logger.Debugw("delete key",
+				zap.String("key", key),
+			)
 		} else {
 			data, err := json.Marshal(event.Object)
 			if err != nil {
@@ -270,11 +276,11 @@ func (g *Agent) storeEvents(events []types.Event) {
 			)
 		}
 	}
-	g.logger.Debugw("store new events: end")
+	g.logger.Debugw(color.BlueString("store new events: end"))
 
 	g.VersionStorage.Store("version", timestamp)
 
-	g.logger.Debugw("store new events: mark version",
+	g.logger.Debugw(color.BlueString("store new events: mark version"),
 		zap.String("version", timestamp),
 	)
 }

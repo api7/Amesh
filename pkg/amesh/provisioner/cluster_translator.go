@@ -92,7 +92,7 @@ func (p *xdsProvisioner) translateClusterLoadAssignments(c *clusterv3.Cluster, u
 	}
 	switch c.GetType() {
 	case clusterv3.Cluster_EDS:
-		p.logger.Warnw("cluster depends on another EDS config, an upstream without nodes setting was generated",
+		p.logger.Debugw("cluster depends on another EDS config, an upstream without nodes setting was generated",
 			zap.Any("upstream", ups),
 		)
 		return nil

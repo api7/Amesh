@@ -108,7 +108,7 @@ spec:
 func (t *PluginConfigResponseRewriteTester) initNginxClient() {
 	if t.nginxClient == nil {
 		utils.ParallelRunAndWait(func() {
-			t.f.CreateHttpbin()
+			t.f.CreateHttpbinInMesh()
 		}, func() {
 			t.nginxName = t.f.CreateNginxInMeshTo(t.f.GetHttpBinServiceFQDN(), false)
 		})

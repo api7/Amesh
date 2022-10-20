@@ -20,6 +20,7 @@ import (
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	endpointv3 "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
+	"github.com/fatih/color"
 	"github.com/golang/protobuf/ptypes/any"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -35,7 +36,7 @@ func (p *xdsProvisioner) processRouteConfigurationV3(res *any.Any) ([]*apisix.Ro
 		DiscardUnknown: true,
 	})
 
-	p.logger.Debugw("process route configurations",
+	p.logger.Debugw(color.GreenString("process route configurations"),
 		zap.Any("route", &route),
 	)
 
@@ -63,7 +64,7 @@ func (p *xdsProvisioner) processStaticRouteConfigurations(rcs []*routev3.RouteCo
 		routes []*apisix.Route
 	)
 	for _, rc := range rcs {
-		p.logger.Debugw("process static route configurations",
+		p.logger.Debugw(color.GreenString("process static route configurations"),
 			zap.Any("static_route", rc),
 		)
 		route, err := p.TranslateRouteConfiguration(rc, p.routeOwnership)
@@ -90,7 +91,7 @@ func (p *xdsProvisioner) processClusterV3(res *any.Any) (*apisix.Upstream, error
 		)
 		return nil, err
 	}
-	p.logger.Debugw("process cluster configurations",
+	p.logger.Debugw(color.GreenString("process cluster configurations"),
 		zap.Any("cluster", &cluster),
 	)
 

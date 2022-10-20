@@ -107,3 +107,38 @@ func CompareUpstreams(u1, u2 []*Upstream) (added, deleted, updated []*Upstream) 
 	}
 	return
 }
+
+func IsSameNodes(nodes1, nodes2 []*Node) bool {
+	if nodes1 == nil && nodes2 == nil {
+		return true
+	}
+	if nodes1 == nil && nodes2 != nil ||
+		nodes1 != nil && nodes2 == nil {
+		return false
+	}
+	if len(nodes1) != len(nodes2) {
+		return false
+	}
+
+	n1Map := map[string]*Node{}
+	for _, u := range nodes1 {
+		n1Map[u.Host] = u
+	}
+
+	for _, n2 := range nodes2 {
+		n1, ok := n1Map[n2.Host]
+		if !ok {
+			return false
+		}
+		if n1.Port != n2.Port {
+			return false
+		}
+		if n1.Weight != n2.Weight {
+			return false
+		}
+
+		// Check metadata
+	}
+
+	return true
+}
