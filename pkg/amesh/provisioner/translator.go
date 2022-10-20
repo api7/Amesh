@@ -30,29 +30,12 @@ import (
 	"github.com/api7/amesh/pkg/apisix"
 )
 
-func (p *xdsProvisioner) processRouteConfigurationV3(res *any.Any) ([]*apisix.Route, error) {
-	var route routev3.RouteConfiguration
-	err := anypb.UnmarshalTo(res, &route, proto.UnmarshalOptions{
-		DiscardUnknown: true,
-	})
-
-	p.logger.Debugw(color.GreenString("process route configurations"),
-		zap.Any("route", &route),
-	)
-
-	if err != nil {
-		p.logger.Errorw("found invalid RouteConfiguration resource",
-			zap.Error(err),
-			zap.Any("resource", res),
-		)
-		return nil, err
-	}
-
-	routes, err := p.TranslateRouteConfiguration(&route, p.routeOwnership)
+func (p *xdsProvisioner) processRouteConfigurationV3(route *routev3.RouteConfiguration) ([]*apisix.Route, error) {
+	routes, err := p.TranslateRouteConfiguration(route, p.routeOwnership)
 	if err != nil {
 		p.logger.Errorw("failed to translate RouteConfiguration to APISIX routes",
 			zap.Error(err),
-			zap.Any("route", &route),
+			zap.Any("route", route),
 		)
 		return nil, err
 	}
