@@ -38,7 +38,8 @@ type ResponseRewriteConfig struct {
 }
 
 type PluginConfigResponseRewriteTester struct {
-	f *framework.Framework
+	f      *framework.Framework
+	logger *log.Logger
 
 	Body    string
 	Headers map[string]string
@@ -51,8 +52,6 @@ type PluginConfigResponseRewriteTester struct {
 
 	nginxReady bool
 	curlReady  bool
-
-	logger *log.Logger
 }
 
 func NewPluginConfigTester(f *framework.Framework, conf *ResponseRewriteConfig) *PluginConfigResponseRewriteTester {
@@ -62,12 +61,11 @@ func NewPluginConfigTester(f *framework.Framework, conf *ResponseRewriteConfig) 
 	)
 	utils.AssertNil(err, "create logger")
 	return &PluginConfigResponseRewriteTester{
-		f: f,
+		f:      f,
+		logger: logger,
 
 		Body:    conf.Body,
 		Headers: conf.Headers,
-
-		logger: logger,
 	}
 }
 
@@ -89,7 +87,7 @@ spec:
 	})
 	utils.AssertNil(err, "marshal AmeshPluginConfig config")
 
-	err = t.f.CreateResourceFromString(fmt.Sprintf(ampc, conf))
+	err = t.f.ApplyResourceFromString(fmt.Sprintf(ampc, conf))
 	utils.AssertNil(err, "create AmeshPluginConfig")
 
 	// TODO: Check generation?

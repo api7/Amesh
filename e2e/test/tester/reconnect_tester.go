@@ -37,8 +37,7 @@ func NewReconnectTester(f *framework.Framework) *ReconnectTester {
 	)
 	utils.AssertNil(err, "create logger")
 	return &ReconnectTester{
-		f: f,
-
+		f:      f,
 		logger: logger,
 	}
 }

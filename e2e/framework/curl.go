@@ -16,7 +16,6 @@ package framework
 
 import (
 	"encoding/json"
-	"github.com/api7/amesh/pkg/apisix"
 	"strings"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 
 	"github.com/api7/amesh/e2e/framework/utils"
 	"github.com/api7/amesh/pkg/amesh/provisioner"
+	"github.com/api7/amesh/pkg/apisix"
 )
 
 const (

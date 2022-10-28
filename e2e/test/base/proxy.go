@@ -15,10 +15,11 @@
 package base
 
 import (
+	"net/http"
+
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
-	"net/http"
 
 	"github.com/api7/amesh/e2e/framework"
 	"github.com/api7/amesh/e2e/framework/utils"

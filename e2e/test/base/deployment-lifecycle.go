@@ -15,17 +15,13 @@
 package base
 
 import (
-	"github.com/api7/amesh/pkg/apisix"
-	"strings"
-	"time"
-
-	"github.com/api7/gopkg/pkg/log"
-	"github.com/fatih/color"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/api7/amesh/e2e/framework"
 	"github.com/api7/amesh/e2e/framework/utils"
+	"github.com/api7/amesh/e2e/test/tester"
+	apisixutils "github.com/api7/amesh/pkg/apisix/utils"
 )
 
 var _ = ginkgo.Describe("[deployment lifecycle]", func() {
@@ -35,42 +31,27 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		// Inside Curl -> (Inside NGINX -> Outside HTTPBIN)
 		// Delete Inside NGINX and make it restart
 
-		ngxName := ""
+		t := tester.NewBaseTester(f)
 
-		httpbinName := "httpbin-outside"
-		f.CreateHttpbinOutsideMesh(httpbinName)
+		t.Create(false, true)
+		t.ValidateProxiedAndAccessible()
 
-		svc := f.GetHttpBinServiceFQDN(httpbinName)
-		ngxName = f.CreateNginxInMeshTo(svc, false)
+		// Delete all pods
+		t.DeleteAllNginxPods()
+		t.ValidateProxiedAndAccessible()
 
-		curl := f.CreateCurl()
+		// Scale to 2
+		f.ScaleNginx(t.NginxDeploymentName, 2, true)
+		beforeDeleteNodes := t.ValidateNginxUpstreamNodesCount(2)
+		t.ValidateProxiedAndAccessible()
 
-		utils.ParallelRunAndWait(func() {
-			f.WaitForNginxReady(ngxName)
-		}, func() {
-			f.WaitForHttpbinReady(httpbinName)
-		}, func() {
-			f.WaitForCurlReady(curl)
-		})
-		time.Sleep(time.Second * 5)
+		// Delete a pod. We have 2 replicas now,
+		// so we can't verify the function by access the upstream,
+		// we need to verify the nodes are changed to ensure the update are handled.
+		t.DeletePartialNginxPods()
+		afterDeleteNodes := t.ValidateNginxUpstreamNodesCount(2)
 
-		output := f.CurlInPod(curl, ngxName+"/ip")
-
-		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
-
-		//time.Sleep(time.Hour)
-		// Delete the pod
-		log.Infof(color.BlueString("Delete " + ngxName + " pods"))
-		utils.AssertNil(f.DeletePodByLabel(f.AppNamespace(), "app="+ngxName), "delete nginx pods")
-		f.WaitForNginxReady(ngxName)
-		time.Sleep(time.Second * 5)
-		output = f.CurlInPod(curl, ngxName+"/ip")
-
-		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+		assert.Equal(ginkgo.GinkgoT(), false, apisixutils.IsSameNodes(beforeDeleteNodes, afterDeleteNodes), "upstream nodes changed")
 	})
 
 	utils.Case("inside mesh curl should be able to access outside->inside mesh", func() {
@@ -78,42 +59,14 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		// ->
 		// Inside Curl -> (Inside NGINX -> Outside HTTPBIN)
 
-		ngxName := ""
+		t := tester.NewBaseTester(f)
 
-		httpbinName := "httpbin-outside"
-		f.CreateHttpbinOutsideMesh(httpbinName)
-
-		svc := f.GetHttpBinServiceFQDN(httpbinName)
-		ngxName = f.CreateNginxOutsideMeshTo(svc, false)
-
-		curl := f.CreateCurl()
-
-		utils.ParallelRunAndWait(func() {
-			f.WaitForNginxReady(ngxName)
-		}, func() {
-			f.WaitForHttpbinReady(httpbinName)
-		}, func() {
-			f.WaitForCurlReady(curl)
-		})
-		time.Sleep(time.Second * 5)
-
-		output := f.CurlInPod(curl, ngxName+"/ip")
-
-		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-		assert.NotContains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+		t.Create(false, false)
+		t.ValidateNotProxiedAndAccessible()
 
 		// Make the ngx inside mesh
-		log.Infof(color.BlueString("Make " + ngxName + " in mesh"))
-		f.MakeNginxInsideMesh(ngxName, true)
-		f.WaitForNginxReady(ngxName)
-
-		time.Sleep(time.Second * 5)
-		output = f.CurlInPod(curl, ngxName+"/ip")
-
-		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+		t.MakeNginxInMesh()
+		t.ValidateProxiedAndAccessible()
 	})
 
 	utils.Case("inside mesh curl should be able to access inside->outside mesh", func() {
@@ -121,42 +74,14 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		// ->
 		// Inside Curl -> (Outside NGINX -> Outside HTTPBIN)
 
-		ngxName := ""
+		t := tester.NewBaseTester(f)
 
-		httpbinName := "httpbin-outside"
-		f.CreateHttpbinOutsideMesh(httpbinName)
+		t.Create(false, true)
+		t.ValidateProxiedAndAccessible()
 
-		svc := f.GetHttpBinServiceFQDN(httpbinName)
-		ngxName = f.CreateNginxInMeshTo(svc, false)
-
-		curl := f.CreateCurl()
-
-		utils.ParallelRunAndWait(func() {
-			f.WaitForNginxReady(ngxName)
-		}, func() {
-			f.WaitForHttpbinReady(httpbinName)
-		}, func() {
-			f.WaitForCurlReady(curl)
-		})
-		time.Sleep(time.Second * 5)
-
-		output := f.CurlInPod(curl, ngxName+"/ip")
-
-		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
-
-		// Make the ngx outside mesh
-		log.Infof(color.BlueString("Make " + ngxName + " in mesh"))
-		f.MakeNginxOutsideMesh(ngxName, true)
-		f.WaitForNginxReady(ngxName)
-
-		time.Sleep(time.Second * 5)
-		output = f.CurlInPod(curl, ngxName+"/ip")
-
-		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-		assert.NotContains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+		// Make the ngx inside mesh
+		t.MakeNginxOutsideMesh()
+		t.ValidateNotProxiedAndAccessible()
 	})
 
 	utils.Case("should be able to handle replicas", func() {
@@ -166,74 +91,23 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		// ->
 		// Inside Curl -> (Inside NGINX (Replica: 1) -> Outside HTTPBIN)
 
-		ngxName := ""
+		t := tester.NewBaseTester(f)
 
-		httpbinName := "httpbin-outside"
-		f.CreateHttpbinOutsideMesh(httpbinName)
-
-		svc := f.GetHttpBinServiceFQDN(httpbinName)
-		ngxName = f.CreateNginxInMeshTo(svc, false)
-
-		curl := f.CreateCurl()
-
-		utils.ParallelRunAndWait(func() {
-			f.WaitForNginxReady(ngxName)
-		}, func() {
-			f.WaitForHttpbinReady(httpbinName)
-		}, func() {
-			f.WaitForCurlReady(curl)
-		})
-		time.Sleep(time.Second * 5)
-
-		output := f.CurlInPod(curl, ngxName+"/ip")
-		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+		t.Create(false, true)
+		t.ValidateProxiedAndAccessible()
 
 		// Verify upstream.nodes length
-		upstreams := f.GetSidecarUpstreams(curl)
-		var httpbinUpstream *apisix.Upstream
-		for _, upstream := range upstreams {
-			if strings.Contains(upstream.Name, ngxName) {
-				httpbinUpstream = upstream
-			}
-		}
-		assert.NotNil(ginkgo.GinkgoT(), httpbinUpstream)
-		assert.Equal(ginkgo.GinkgoT(), 1, len(httpbinUpstream.Nodes), "httpbin nodes count")
+		t.ValidateNginxUpstreamNodesCount(1)
+		t.ValidateProxiedAndAccessible()
 
 		// Scale to 2 and verify upstream.nodes length
-		f.ScaleNginx(ngxName, 2, true)
-		upstreams = f.GetSidecarUpstreams(curl)
-		httpbinUpstream = nil
-		for _, upstream := range upstreams {
-			if strings.Contains(upstream.Name, ngxName) {
-				httpbinUpstream = upstream
-			}
-		}
-		assert.NotNil(ginkgo.GinkgoT(), httpbinUpstream)
-		assert.Equal(ginkgo.GinkgoT(), 2, len(httpbinUpstream.Nodes), "httpbin nodes count")
-
-		output = f.CurlInPod(curl, ngxName+"/ip")
-		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+		f.ScaleNginx(t.NginxDeploymentName, 2, true)
+		t.ValidateNginxUpstreamNodesCount(2)
+		t.ValidateProxiedAndAccessible()
 
 		// Scale to 1 and verify upstream.nodes length
-		f.ScaleNginx(ngxName, 1, true)
-		upstreams = f.GetSidecarUpstreams(curl)
-		httpbinUpstream = nil
-		for _, upstream := range upstreams {
-			if strings.Contains(upstream.Name, ngxName) {
-				httpbinUpstream = upstream
-			}
-		}
-		assert.NotNil(ginkgo.GinkgoT(), httpbinUpstream)
-		assert.Equal(ginkgo.GinkgoT(), 1, len(httpbinUpstream.Nodes), "httpbin nodes count")
-
-		output = f.CurlInPod(curl, ngxName+"/ip")
-		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
-
+		f.ScaleNginx(t.NginxDeploymentName, 1, true)
+		t.ValidateNginxUpstreamNodesCount(1)
+		t.ValidateProxiedAndAccessible()
 	})
 })

@@ -22,7 +22,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -55,6 +54,30 @@ func (f *Framework) CreateConfigMap(name, key, value string) error {
 // ApplyResourceFromString creates a Kubernetes resource from the given manifest.
 func (f *Framework) ApplyResourceFromString(res string) error {
 	return k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, res)
+}
+
+func (f *Framework) GetDeploymentPodNames(namespace, name string) ([]string, error) {
+	return f.GetPodNamesByLabel(namespace, "app="+name)
+}
+
+func (f *Framework) GetPodNamesByLabel(namespace string, labelSelector string) ([]string, error) {
+	var names []string
+
+	client, err := k8s.GetKubernetesClientFromOptionsE(ginkgo.GinkgoT(), f.kubectlOpts)
+	if err != nil {
+		return names, err
+	}
+	pods, err := client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
+	if err != nil {
+		return names, err
+	}
+
+	for _, pod := range pods.Items {
+		names = append(names, pod.Name)
+	}
+	return names, nil
 }
 
 // DeleteResourceFromString deletes a Kubernetes resource from the given manifest.
@@ -199,7 +222,7 @@ func (f *Framework) WaitForAmeshPluginConfigEvents(name string, typ string, stat
 func (f *Framework) GetDeploymentLogs(ns, name string) string {
 	cli, err := k8s.GetKubernetesClientFromOptionsE(f.t, f.kubectlOpts)
 	if err != nil {
-		assert.Nilf(ginkgo.GinkgoT(), err, "get client error: %s", err.Error())
+		utils.AssertNil(err, "get client error: %s", err.Error())
 		return ""
 	}
 
