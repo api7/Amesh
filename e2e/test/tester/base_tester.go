@@ -40,7 +40,7 @@ func NewBaseTester(f *framework.Framework) *BaseTester {
 	}
 }
 
-func (t *BaseTester) Create(httpbinInside, nginxInside bool) {
+func (t *BaseTester) Create(httpbinInside, nginxInside bool, unavailable ...bool) {
 	f := t.f
 
 	t.HttpbinPodName = "httpbin"
@@ -52,10 +52,25 @@ func (t *BaseTester) Create(httpbinInside, nginxInside bool) {
 	t.HttpbinInside = httpbinInside
 
 	svc := f.GetHttpBinServiceFQDN(t.HttpbinPodName)
+
+	available := true
+	if len(unavailable) >= 1 {
+		available = !unavailable[0]
+	}
 	if nginxInside {
-		t.NginxDeploymentName = f.CreateNginxInMeshTo(svc, false)
+		if available {
+			t.logger.Infof("Creating inside nginx")
+			t.NginxDeploymentName = f.CreateNginxInMeshTo(svc, false)
+		} else {
+			t.logger.Infof("Creating unavailable inside nginx")
+			t.NginxDeploymentName = f.CreateUnavailableNginxInMeshTo(svc, false)
+		}
 	} else {
-		t.NginxDeploymentName = f.CreateNginxOutsideMeshTo(svc, false)
+		if available {
+			t.NginxDeploymentName = f.CreateNginxOutsideMeshTo(svc, false)
+		} else {
+			t.NginxDeploymentName = f.CreateUnavailableNginxOutsideMeshTo(svc, false)
+		}
 	}
 	t.NginxInside = nginxInside
 	t.NginxReplica = 1
@@ -63,7 +78,9 @@ func (t *BaseTester) Create(httpbinInside, nginxInside bool) {
 	t.CurlPodName = f.CreateCurl()
 
 	utils.ParallelRunAndWait(func() {
-		f.WaitForNginxReady(t.NginxDeploymentName)
+		if available {
+			f.WaitForNginxReady(t.NginxDeploymentName)
+		}
 	}, func() {
 		f.WaitForHttpbinReady(t.HttpbinPodName)
 	}, func() {
@@ -111,11 +128,30 @@ func (t BaseTester) MakeNginxOutsideMesh() {
 	time.Sleep(time.Second * 5)
 }
 
+func (t BaseTester) MakeNginxUnavailable() {
+	log.Infof(color.BlueString("Make " + t.NginxDeploymentName + " unavailable"))
+	t.f.MakeNginxUnavailable(t.NginxDeploymentName)
+
+	time.Sleep(time.Second * 5)
+}
+
+func (t BaseTester) MakeNginxAvailable() {
+	log.Infof(color.BlueString("Make " + t.NginxDeploymentName + " available"))
+	t.f.MakeNginxAvailable(t.NginxDeploymentName, true)
+
+	time.Sleep(time.Second * 5)
+}
+
 func (t *BaseTester) ValidateProxiedAndAccessible() {
 	output := t.f.CurlInPod(t.CurlPodName, t.NginxDeploymentName+"/ip")
 	assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
 	assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
 	assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+}
+
+func (t *BaseTester) ValidateNotAccessible() {
+	output := t.f.CurlInPod(t.CurlPodName, t.NginxDeploymentName+"/ip")
+	assert.NotContains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
 }
 
 func (t *BaseTester) ValidateNotProxiedAndAccessible() {

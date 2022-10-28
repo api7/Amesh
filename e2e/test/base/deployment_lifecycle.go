@@ -110,4 +110,53 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		t.ValidateNginxUpstreamNodesCount(1)
 		t.ValidateProxiedAndAccessible()
 	})
+
+	utils.Case("should be able to handle deployment become unavailable and recovered", func() {
+		// Inside Curl -> (Inside NGINX (Replica: 1) -> Outside HTTPBIN)
+		// ->
+		// Inside Curl -> (Inside NGINX (Unavailable) -> Outside HTTPBIN)
+		// ->
+		// Inside Curl -> (Inside NGINX (Replica: 1) -> Outside HTTPBIN)
+
+		t := tester.NewBaseTester(f)
+
+		t.Create(false, true)
+		t.ValidateProxiedAndAccessible()
+		beforeNodes := t.ValidateNginxUpstreamNodesCount(1)
+
+		// make the deployment unavailable
+		t.MakeNginxUnavailable()
+		unavailableNodes := t.ValidateNginxUpstreamNodesCount(1)
+		// k8s won't delete old pod since the new pod unavailable, so the nodes is the same
+		assert.Equal(ginkgo.GinkgoT(), true, apisixutils.IsSameNodes(beforeNodes, unavailableNodes), "upstream nodes should unchanged")
+		// still accessible because the old pod alive
+		t.ValidateProxiedAndAccessible()
+
+		// make the deployment available
+		t.MakeNginxAvailable()
+		afterNodes := t.ValidateNginxUpstreamNodesCount(1)
+		// the deployment recovered but the config is the same, so the old pod kept
+		assert.Equal(ginkgo.GinkgoT(), true, apisixutils.IsSameNodes(beforeNodes, afterNodes), "upstream nodes changed")
+		t.ValidateProxiedAndAccessible()
+	})
+
+	utils.FCase("should be able to handle deployment started as unavailable and recovered", func() {
+		// Inside Curl -> (Inside NGINX (Replica: 1) -> Outside HTTPBIN)
+		// ->
+		// Inside Curl -> (Inside NGINX (Unavailable) -> Outside HTTPBIN)
+		// ->
+		// Inside Curl -> (Inside NGINX (Replica: 1) -> Outside HTTPBIN)
+
+		t := tester.NewBaseTester(f)
+
+		t.Create(false, true, true)
+		beforeNodes := t.ValidateNginxUpstreamNodesCount(0)
+		t.ValidateNotAccessible()
+
+		// make the deployment available
+		t.MakeNginxAvailable()
+		afterNodes := t.ValidateNginxUpstreamNodesCount(1)
+		assert.Equal(ginkgo.GinkgoT(), false, apisixutils.IsSameNodes(beforeNodes, afterNodes), "upstream nodes changed")
+		t.ValidateProxiedAndAccessible()
+	})
 })

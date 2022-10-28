@@ -120,12 +120,22 @@ func (f *Framework) getNginxArgs(name string) *NginxArgs {
 
 func (f *Framework) CreateNginxOutsideMeshTo(svc string, waitReady bool) string {
 	log.Infof("Create NGINX outside Mesh to " + svc)
-	return f.createNginxTo(svc, false, waitReady)
+	return f.createNginxTo(f.args.LocalRegistry, svc, false, waitReady)
 }
 
 func (f *Framework) CreateNginxInMeshTo(svc string, waitReady bool) string {
 	log.Infof("Create NGINX in Mesh to " + svc)
-	return f.createNginxTo(svc, true, waitReady)
+	return f.createNginxTo(f.args.LocalRegistry, svc, true, waitReady)
+}
+
+func (f *Framework) CreateUnavailableNginxOutsideMeshTo(svc string, waitReady bool) string {
+	log.Infof("Create unavailable NGINX outside Mesh to " + svc)
+	return f.createNginxTo("unknown-registry", svc, false, waitReady)
+}
+
+func (f *Framework) CreateUnavailableNginxInMeshTo(svc string, waitReady bool) string {
+	log.Infof("Create unavailable NGINX in Mesh to " + svc)
+	return f.createNginxTo("unknown-registry", svc, true, waitReady)
 }
 
 func (f *Framework) MakeNginxInsideMesh(name string, waitReady bool) {
@@ -144,6 +154,28 @@ func (f *Framework) MakeNginxOutsideMesh(name string, waitReady bool) {
 	f.applyNginx(args, waitReady)
 }
 
+func (f *Framework) MakeNginxUnavailable(name string) {
+	args := f.getNginxArgs(name)
+	newArgs := &NginxArgs{
+		ManifestArgs: &ManifestArgs{
+			LocalRegistry: "unknown-registry",
+		},
+		Name:          args.Name,
+		ConfigMapName: args.ConfigMapName,
+		InMesh:        args.InMesh,
+		Replicas:      args.Replicas,
+		ProxyService:  args.ProxyService,
+	}
+
+	f.applyNginx(newArgs, false)
+}
+
+func (f *Framework) MakeNginxAvailable(name string, waitReady bool) {
+	args := f.getNginxArgs(name)
+	args.LocalRegistry = f.args.LocalRegistry
+	f.applyNginx(args, waitReady)
+}
+
 func (f *Framework) ScaleNginx(name string, replicas int, waitReady bool) {
 	args := f.getNginxArgs(name)
 	args.Replicas = replicas
@@ -152,11 +184,13 @@ func (f *Framework) ScaleNginx(name string, replicas int, waitReady bool) {
 	f.applyNginx(args, waitReady)
 }
 
-func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) string {
+func (f *Framework) createNginxTo(registry, svc string, inMesh bool, waitReady bool) string {
 	randomName := fmt.Sprintf("ngx-%d", time.Now().Nanosecond())
 
 	args := &NginxArgs{
-		ManifestArgs:  f.args,
+		ManifestArgs: &ManifestArgs{
+			LocalRegistry: registry,
+		},
 		Name:          randomName,
 		ConfigMapName: randomName,
 		InMesh:        inMesh,
@@ -169,6 +203,7 @@ func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) strin
 	return randomName
 }
 
+// applyNginx doesn't record the appArgs
 func (f *Framework) applyNginx(args *NginxArgs, waitReady bool) {
 	artifact, err := utils.RenderManifest(nginxTemplate, args)
 	utils.AssertNil(err, "render nginx template")
