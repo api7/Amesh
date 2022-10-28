@@ -59,6 +59,8 @@ type Framework struct {
 	cp        controlplane.ControlPlane
 	amesh     ameshcontroller.AmeshController
 	namespace string
+
+	appArgs map[string]interface{}
 }
 
 type Options struct {
@@ -122,6 +124,8 @@ func NewFramework(opts *Options) *Framework {
 
 		t:         ginkgo.GinkgoT(),
 		namespace: utils.RandomNamespace(),
+
+		appArgs: map[string]interface{}{},
 	}
 	f.kubectlOpts = &k8s.KubectlOptions{
 		ConfigPath: opts.KubeConfig,
@@ -271,6 +275,8 @@ func (f *Framework) afterEach() {
 		}
 		f.tunnels = nil
 	})
+
+	f.appArgs = map[string]interface{}{}
 
 	e.Wait()
 }

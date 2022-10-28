@@ -29,32 +29,13 @@ import (
 )
 
 const (
-	nginxConfigMap = `
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: %s
-data:
-  proxy.conf: |
-    server {
-        listen 80;
-        server_name test.com;
-        location / {
-            proxy_pass http://%s;
-            proxy_set_header Host %s;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-        }
-    }
-`
-
 	nginxTemplate = `
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Name }}
 spec:
-  replicas: 1
+  replicas: {{ .Replicas }}
   selector:
     matchLabels:
       app: {{ .Name }}
@@ -69,7 +50,7 @@ spec:
       volumes:
       - name: conf
         configMap:
-          name: {{ .ConfigMap }}
+          name: {{ .ConfigMapName }}
       containers:
       - name: nginx
         image: {{ .LocalRegistry }}/nginx:1.19.3
@@ -93,14 +74,48 @@ spec:
   - name: http
     targetPort: 80
     port: 80
-    protocol: TCP`
+    protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .ConfigMapName }}
+data:
+  proxy.conf: |
+    server {
+        listen 80;
+        server_name test.com;
+        location / {
+            proxy_pass http://{{ .ProxyService }};
+            proxy_set_header Host {{ .ProxyService }};
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+        }
+    }
+`
 )
 
-type nginxRenderArgs struct {
+type NginxArgs struct {
 	*ManifestArgs
-	Name      string
-	ConfigMap string
-	InMesh    bool
+	Name          string
+	ConfigMapName string
+	InMesh        bool
+	Replicas      int
+	ProxyService  string
+}
+
+func (f *Framework) getNginxArgs(name string) *NginxArgs {
+	if args, ok := f.appArgs[name]; ok {
+		if nginxArgs, ok := args.(*NginxArgs); ok {
+			return nginxArgs
+		} else {
+			ginkgo.Fail(fmt.Sprintf("failed to convert config to nginx args: %s", name), 1)
+		}
+	} else {
+		ginkgo.Fail(fmt.Sprintf("failed to get nginx args: %s", name), 1)
+	}
+
+	return nil
 }
 
 func (f *Framework) CreateNginxOutsideMeshTo(svc string, waitReady bool) string {
@@ -113,33 +128,48 @@ func (f *Framework) CreateNginxInMeshTo(svc string, waitReady bool) string {
 	return f.createNginxTo(svc, true, waitReady)
 }
 
-func (f *Framework) MakeNginxInsideMesh(name, svc string, waitReady bool) {
-	f.applyNginx(name, svc, true, waitReady)
+func (f *Framework) MakeNginxInsideMesh(name string, waitReady bool) {
+	args := f.getNginxArgs(name)
+	args.InMesh = true
+	f.appArgs[name] = args
+
+	f.applyNginx(args, waitReady)
 }
 
-func (f *Framework) MakeNginxOutsideMesh(name, svc string, waitReady bool) {
-	f.applyNginx(name, svc, false, waitReady)
+func (f *Framework) MakeNginxOutsideMesh(name string, waitReady bool) {
+	args := f.getNginxArgs(name)
+	args.InMesh = false
+	f.appArgs[name] = args
+
+	f.applyNginx(args, waitReady)
+}
+
+func (f *Framework) ScaleNginx(name string, replicas int, waitReady bool) {
+	args := f.getNginxArgs(name)
+	args.Replicas = replicas
+	f.appArgs[name] = args
+
+	f.applyNginx(args, waitReady)
 }
 
 func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) string {
 	randomName := fmt.Sprintf("ngx-%d", time.Now().Nanosecond())
 
-	f.applyNginx(randomName, svc, inMesh, waitReady)
+	args := &NginxArgs{
+		ManifestArgs:  f.args,
+		Name:          randomName,
+		ConfigMapName: randomName,
+		InMesh:        inMesh,
+		Replicas:      1,
+		ProxyService:  svc,
+	}
+	f.appArgs[randomName] = args
+	f.applyNginx(args, waitReady)
 
 	return randomName
 }
 
-func (f *Framework) applyNginx(randomName, svc string, inMesh bool, waitReady bool) {
-	conf := fmt.Sprintf(nginxConfigMap, randomName, svc, svc)
-
-	utils.AssertNil(f.CreateResourceFromString(conf), "create config map "+randomName)
-
-	args := &nginxRenderArgs{
-		ManifestArgs: f.args,
-		Name:         randomName,
-		ConfigMap:    randomName,
-		InMesh:       inMesh,
-	}
+func (f *Framework) applyNginx(args *NginxArgs, waitReady bool) {
 	artifact, err := utils.RenderManifest(nginxTemplate, args)
 	utils.AssertNil(err, "render nginx template")
 	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
@@ -149,7 +179,7 @@ func (f *Framework) applyNginx(randomName, svc string, inMesh bool, waitReady bo
 	utils.AssertNil(err, "apply nginx")
 
 	if waitReady {
-		f.WaitForNginxReady(randomName)
+		f.WaitForNginxReady(args.Name)
 	}
 
 	return

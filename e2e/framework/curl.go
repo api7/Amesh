@@ -16,6 +16,7 @@ package framework
 
 import (
 	"encoding/json"
+	"github.com/api7/amesh/pkg/apisix"
 	"strings"
 	"time"
 
@@ -117,8 +118,8 @@ func (f *Framework) CurlInPod(name string, args ...string) string {
 	return output
 }
 
-func (f *Framework) GetSidecarStatus(podName string) *provisioner.XdsProvisionerStatus {
-	cmd := []string{"exec", podName, "-c", "istio-proxy", "--", "curl", "-s", "localhost:9999/status"}
+func (f *Framework) queryStatusServer(podName, api string) string {
+	cmd := []string{"exec", podName, "-c", "istio-proxy", "--", "curl", "-s", "localhost:9999/" + api}
 	output, err := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, cmd...)
 
 	log.SkipFramesOnce(1)
@@ -128,9 +129,35 @@ func (f *Framework) GetSidecarStatus(podName string) *provisioner.XdsProvisioner
 	}
 	utils.AssertNil(err, "failed to get sidecar %s status", podName)
 
+	return output
+}
+
+func (f *Framework) GetSidecarStatus(podName string) *provisioner.XdsProvisionerStatus {
+	output := f.queryStatusServer(podName, "status")
+
 	var status provisioner.XdsProvisionerStatus
-	err = json.Unmarshal([]byte(output), &status)
+	err := json.Unmarshal([]byte(output), &status)
 	utils.AssertNil(err, "failed to unmarshal sidecar %s status", podName)
 
 	return &status
+}
+
+func (f *Framework) GetSidecarRoutes(podName string) map[string]*apisix.Route {
+	output := f.queryStatusServer(podName, "routes")
+
+	var routes map[string]*apisix.Route
+	err := json.Unmarshal([]byte(output), &routes)
+	utils.AssertNil(err, "failed to unmarshal sidecar %s routes", podName)
+
+	return routes
+}
+
+func (f *Framework) GetSidecarUpstreams(podName string) map[string]*apisix.Upstream {
+	output := f.queryStatusServer(podName, "upstreams")
+
+	var upstreams map[string]*apisix.Upstream
+	err := json.Unmarshal([]byte(output), &upstreams)
+	utils.AssertNil(err, "failed to unmarshal sidecar %s upstreams", podName)
+
+	return upstreams
 }

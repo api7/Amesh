@@ -52,12 +52,12 @@ func (f *Framework) CreateConfigMap(name, key, value string) error {
 	return nil
 }
 
-// CreateResourceFromString creates a Kubernetes resource from the given manifest.
-func (f *Framework) CreateResourceFromString(res string) error {
+// ApplyResourceFromString creates a Kubernetes resource from the given manifest.
+func (f *Framework) ApplyResourceFromString(res string) error {
 	return k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, res)
 }
 
-// CreateResourceFromString deletes a Kubernetes resource from the given manifest.
+// DeleteResourceFromString deletes a Kubernetes resource from the given manifest.
 func (f *Framework) DeleteResourceFromString(res, name string) error {
 	_, err := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "delete", res, name)
 	return err
