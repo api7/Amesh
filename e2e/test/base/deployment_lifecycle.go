@@ -140,7 +140,7 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		t.ValidateProxiedAndAccessible()
 	})
 
-	utils.FCase("should be able to handle deployment started as unavailable and recovered", func() {
+	utils.Case("should be able to handle deployment started as unavailable and recovered", func() {
 		// Inside Curl -> (Inside NGINX (Replica: 1) -> Outside HTTPBIN)
 		// ->
 		// Inside Curl -> (Inside NGINX (Unavailable) -> Outside HTTPBIN)
