@@ -283,7 +283,7 @@ func AssertNil(err error, msg ...interface{}) {
 		}
 		log.SkipFramesOnce(1)
 		log.Errorf(errMsg)
-		time.Sleep(time.Hour)
+		//time.Sleep(time.Hour)
 	}
 	assert.Nil(ginkgo.GinkgoT(), err, msg...)
 }
