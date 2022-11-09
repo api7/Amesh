@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package ai.api7.amesh.proto.v1;
+
+option go_package = "github.com/api7/amesh/api/proto/v1";
+
+message Empty {
+}
+
+message HealthCheckResponse {
+  string text = 1;
+}
+
+service HealthCheckService {
+  rpc Ping(Empty) returns (HealthCheckResponse) {}
+}

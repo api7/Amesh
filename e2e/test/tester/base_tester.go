@@ -89,15 +89,19 @@ func (t *BaseTester) Create(httpbinInside, nginxInside bool, unavailable ...bool
 	time.Sleep(time.Second * 5)
 }
 
-func (t BaseTester) DeleteAllNginxPods() {
+// ========================
+// == Action functions ==
+// ========================
+
+func (t *BaseTester) DeleteAllNginxPods() {
 	log.Infof(color.BlueString("Delete " + t.NginxDeploymentName + " pods"))
 	utils.AssertNil(t.f.DeletePodByLabel(t.f.AppNamespace(), "app="+t.NginxDeploymentName), "delete nginx pods")
 	t.f.WaitForNginxReady(t.NginxDeploymentName)
 	time.Sleep(time.Second * 5)
 }
 
-func (t BaseTester) DeletePartialNginxPods() {
-	log.Infof(color.BlueString("Delete " + t.NginxDeploymentName + " pods"))
+func (t *BaseTester) DeletePartialNginxPods() {
+	log.Infof(color.BlueString("Delete partial " + t.NginxDeploymentName + " pods"))
 
 	podNames, err := t.f.GetDeploymentPodNames(t.f.AppNamespace(), t.NginxDeploymentName)
 	utils.AssertNil(err, "get nginx pods")
@@ -108,7 +112,7 @@ func (t BaseTester) DeletePartialNginxPods() {
 	time.Sleep(time.Second * 5)
 }
 
-func (t BaseTester) MakeNginxInMesh() {
+func (t *BaseTester) MakeNginxInMesh() {
 	log.Infof(color.BlueString("Make " + t.NginxDeploymentName + " in mesh"))
 	t.f.MakeNginxInsideMesh(t.NginxDeploymentName, true)
 	t.f.WaitForNginxReady(t.NginxDeploymentName)
@@ -118,7 +122,7 @@ func (t BaseTester) MakeNginxInMesh() {
 	time.Sleep(time.Second * 5)
 }
 
-func (t BaseTester) MakeNginxOutsideMesh() {
+func (t *BaseTester) MakeNginxOutsideMesh() {
 	log.Infof(color.BlueString("Make " + t.NginxDeploymentName + " outside mesh"))
 	t.f.MakeNginxOutsideMesh(t.NginxDeploymentName, true)
 	t.f.WaitForNginxReady(t.NginxDeploymentName)
@@ -128,19 +132,29 @@ func (t BaseTester) MakeNginxOutsideMesh() {
 	time.Sleep(time.Second * 5)
 }
 
-func (t BaseTester) MakeNginxUnavailable() {
+func (t *BaseTester) MakeNginxUnavailable() {
 	log.Infof(color.BlueString("Make " + t.NginxDeploymentName + " unavailable"))
 	t.f.MakeNginxUnavailable(t.NginxDeploymentName)
 
 	time.Sleep(time.Second * 5)
 }
 
-func (t BaseTester) MakeNginxAvailable() {
+func (t *BaseTester) MakeNginxAvailable() {
 	log.Infof(color.BlueString("Make " + t.NginxDeploymentName + " available"))
 	t.f.MakeNginxAvailable(t.NginxDeploymentName, true)
 
 	time.Sleep(time.Second * 5)
 }
+
+func (t *BaseTester) ScaleNginx(replica int) {
+	log.Infof(color.BlueString("Scale nginx "+t.NginxDeploymentName+" to %v", replica))
+	t.f.ScaleNginx(t.NginxDeploymentName, replica, true)
+	time.Sleep(time.Second * 5)
+}
+
+// ========================
+// == Validate functions ==
+// ========================
 
 func (t *BaseTester) ValidateProxiedAndAccessible() {
 	output := t.f.CurlInPod(t.CurlPodName, t.NginxDeploymentName+"/ip")

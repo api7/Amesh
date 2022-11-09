@@ -41,7 +41,7 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		t.ValidateProxiedAndAccessible()
 
 		// Scale to 2
-		f.ScaleNginx(t.NginxDeploymentName, 2, true)
+		t.ScaleNginx(2)
 		beforeDeleteNodes := t.ValidateNginxUpstreamNodesCount(2)
 		t.ValidateProxiedAndAccessible()
 
@@ -84,7 +84,7 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		t.ValidateNotProxiedAndAccessible()
 	})
 
-	utils.Case("should be able to handle replicas", func() {
+	utils.Case("should be able to handle replica changes", func() {
 		// Inside Curl -> (Inside NGINX (Replica: 1) -> Outside HTTPBIN)
 		// ->
 		// Inside Curl -> (Inside NGINX (Replica: 2) -> Outside HTTPBIN)
@@ -101,12 +101,12 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		t.ValidateProxiedAndAccessible()
 
 		// Scale to 2 and verify upstream.nodes length
-		f.ScaleNginx(t.NginxDeploymentName, 2, true)
+		t.ScaleNginx(2)
 		t.ValidateNginxUpstreamNodesCount(2)
 		t.ValidateProxiedAndAccessible()
 
 		// Scale to 1 and verify upstream.nodes length
-		f.ScaleNginx(t.NginxDeploymentName, 1, true)
+		t.ScaleNginx(1)
 		t.ValidateNginxUpstreamNodesCount(1)
 		t.ValidateProxiedAndAccessible()
 	})
@@ -140,7 +140,7 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		t.ValidateProxiedAndAccessible()
 	})
 
-	utils.FCase("should be able to handle deployment started as unavailable and recovered", func() {
+	utils.Case("should be able to handle deployment started as unavailable and recovered", func() {
 		// Inside Curl -> (Inside NGINX (Replica: 1) -> Outside HTTPBIN)
 		// ->
 		// Inside Curl -> (Inside NGINX (Unavailable) -> Outside HTTPBIN)

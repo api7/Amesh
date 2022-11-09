@@ -16,6 +16,7 @@ package provisioner
 
 import (
 	"context"
+	"crypto/tls"
 	"strings"
 	"testing"
 	"time"
@@ -23,13 +24,14 @@ import (
 	"github.com/api7/gopkg/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	ameshapi "github.com/api7/amesh/api/proto/v1"
 )
 
 // func TestAmeshGrpcServer(t *testing.T) {
-func AmeshGrpcServer(t *testing.T) {
+func ConnAmeshGrpcServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -74,4 +76,44 @@ func AmeshGrpcServer(t *testing.T) {
 			zap.Any("body", dr),
 		)
 	}
+}
+
+func PingAmeshGrpcServer(t *testing.T) {
+	//func AmeshGrpcServer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	svc := "amesh-controller.istio-system.svc.cluster.local:15810"
+	svc = "localhost:15810"
+	svc = "localhost:9080"
+	svc = "localhost:9443"
+	tlsConf := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+	creds := credentials.NewTLS(tlsConf)
+
+	conn, err := grpc.DialContext(ctx, svc,
+		grpc.WithTransportCredentials(creds),
+		grpc.WithAuthority("grpc-proxy"),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		cancel()
+		log.Errorw("failed to conn amesh source",
+			zap.Error(err),
+		)
+	}
+
+	client := ameshapi.NewHealthCheckServiceClient(conn)
+
+	pingIt := func() {
+		pong, err := client.Ping(context.Background(), &ameshapi.Empty{})
+		if err != nil {
+			panic(err)
+		}
+		log.Errorw(pong.Text)
+	}
+
+	pingIt()
+	pingIt()
 }

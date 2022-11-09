@@ -96,6 +96,9 @@ func (p *ameshProvisioner) Run(stop <-chan struct{}) error {
 		conn, err := grpc.DialContext(dialCtx, p.src,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
+			//grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			//	PermitWithoutStream: true,
+			//}),
 		)
 		if err != nil {
 			cancel()

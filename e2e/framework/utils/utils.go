@@ -47,6 +47,11 @@ func RenderManifest(manifest string, data any) (string, error) {
 	return artifact.String(), nil
 }
 
+// TODO: automatically recover assertion failure
+func RetryUntilTimeout(condFunc func() (bool, error)) error {
+	return wait.PollImmediate(time.Second*5, time.Second*30, condFunc)
+}
+
 func WaitExponentialBackoff(condFunc func() (bool, error)) error {
 	backoff := wait.Backoff{
 		Duration: time.Second,
