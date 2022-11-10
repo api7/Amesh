@@ -38,7 +38,8 @@ type ResponseRewriteConfig struct {
 }
 
 type PluginConfigResponseRewriteTester struct {
-	f *framework.Framework
+	f      *framework.Framework
+	logger *log.Logger
 
 	Body    string
 	Headers map[string]string
@@ -46,13 +47,11 @@ type PluginConfigResponseRewriteTester struct {
 	deletedHeaders map[string]struct{}
 
 	nginxName   string
-	nginxTunnel *httpexpect.Expect
+	nginxClient *httpexpect.Expect
 	curlName    string
 
 	nginxReady bool
 	curlReady  bool
-
-	logger *log.Logger
 }
 
 func NewPluginConfigTester(f *framework.Framework, conf *ResponseRewriteConfig) *PluginConfigResponseRewriteTester {
@@ -62,12 +61,11 @@ func NewPluginConfigTester(f *framework.Framework, conf *ResponseRewriteConfig) 
 	)
 	utils.AssertNil(err, "create logger")
 	return &PluginConfigResponseRewriteTester{
-		f: f,
+		f:      f,
+		logger: logger,
 
 		Body:    conf.Body,
 		Headers: conf.Headers,
-
-		logger: logger,
 	}
 }
 
@@ -89,7 +87,7 @@ spec:
 	})
 	utils.AssertNil(err, "marshal AmeshPluginConfig config")
 
-	err = t.f.CreateResourceFromString(fmt.Sprintf(ampc, conf))
+	err = t.f.ApplyResourceFromString(fmt.Sprintf(ampc, conf))
 	utils.AssertNil(err, "create AmeshPluginConfig")
 
 	// TODO: Check generation?
@@ -105,11 +103,13 @@ spec:
 	)
 }
 
-func (t *PluginConfigResponseRewriteTester) initNginxTunnel() {
-	f := t.f
-
-	if t.nginxTunnel == nil {
-		t.nginxName = f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(), false)
+func (t *PluginConfigResponseRewriteTester) initNginxClient() {
+	if t.nginxClient == nil {
+		utils.ParallelRunAndWait(func() {
+			t.f.CreateHttpbinInMesh()
+		}, func() {
+			t.nginxName = t.f.CreateNginxInMeshTo(t.f.GetHttpBinServiceFQDN(), false)
+		})
 	}
 }
 
@@ -121,10 +121,14 @@ func (t *PluginConfigResponseRewriteTester) initCurl() {
 	}
 }
 
-func (t *PluginConfigResponseRewriteTester) waitNginxTunnel() {
-	if !t.nginxReady {
-		t.f.WaitForNginxReady(t.nginxName)
-		t.nginxTunnel = t.f.NewHTTPClientToNginx(t.nginxName)
+func (t *PluginConfigResponseRewriteTester) waitNginxClient() {
+	if !t.nginxReady && t.nginxName != "" {
+		utils.ParallelRunAndWait(func() {
+			t.f.WaitForHttpbinReady()
+			t.f.WaitForNginxReady(t.nginxName)
+		})
+
+		t.nginxClient, _ = t.f.NewHTTPClientToNginx(t.nginxName)
 		t.nginxReady = true
 	}
 }
@@ -139,13 +143,13 @@ func (t *PluginConfigResponseRewriteTester) waitCurl() {
 func (t *PluginConfigResponseRewriteTester) Create() {
 	go func() {
 		defer ginkgo.GinkgoRecover()
-		t.initNginxTunnel()
+		t.initNginxClient()
 	}()
 	go func() {
 		defer ginkgo.GinkgoRecover()
 		t.initCurl()
 	}()
-	//t.initNginxTunnel()
+	//t.initNginxClient()
 	//t.initCurl()
 
 	t.applyAmeshPluginConfig()
@@ -186,9 +190,9 @@ func (t *PluginConfigResponseRewriteTester) DeleteAmeshPluginConfig() {
 
 func (t *PluginConfigResponseRewriteTester) ValidateInMeshNginxProxyAccess(withoutHeaders ...string) {
 	f := t.f
-	t.waitNginxTunnel()
+	t.waitNginxClient()
 
-	resp := t.nginxTunnel.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
+	resp := t.nginxClient.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
 
 	t.logger.Debugw("resp", zap.Any("headers", resp.Raw().Header), zap.Any("body", resp.Body().Raw()))
 	if resp.Raw().StatusCode != http.StatusOK {

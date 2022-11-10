@@ -24,9 +24,13 @@ import (
 
 func TestName(t *testing.T) {
 
-	artifact, _ := utils.RenderManifest(_httpbinManifest, &ManifestArgs{
-		LocalRegistry:   "10.0.0.2:5000",
+	artifact, _ := utils.RenderManifest(_httpbinManifest, &httpbinRenderArgs{
+		ManifestArgs: &ManifestArgs{
+			LocalRegistry: "10.0.0.2:5000",
+		},
 		HttpBinReplicas: 1,
+		Name:            "httpbin",
+		InMesh:          true,
 	})
 
 	assert.Equal(t, `
@@ -45,6 +49,8 @@ spec:
     metadata:
       labels:
         app: httpbin
+      annotations:
+        sidecar.istio.io/inject: "true"
     spec:
       containers:
       - name: httpbin

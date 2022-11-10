@@ -16,7 +16,6 @@ package base
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/onsi/ginkgo/v2"
@@ -29,18 +28,24 @@ import (
 var _ = ginkgo.Describe("[basic proxy functions]", func() {
 	f := framework.NewDefaultFramework()
 
-	utils.Case("should be able to proxy outside mesh", func() {
-		_ = f
+	utils.Case("outside mesh should be able to access inside mesh", func() {
+		// Outside NGINX -> Inside HTTPBIN
 
-		name := f.CreateNginxOutsideMeshTo(f.GetHttpBinServiceFQDN(), true)
-		tunnel := f.NewHTTPClientToNginx(name)
+		ngxName := ""
 
-		time.Sleep(time.Second * 8)
-		resp := tunnel.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
+		utils.ParallelRunAndWait(func() {
+			f.CreateHttpbinInMesh()
+			f.WaitForHttpbinReady()
+		}, func() {
+			ngxName = f.CreateNginxOutsideMeshTo(f.GetHttpBinServiceFQDN(), true)
+			f.WaitForNginxReady(ngxName)
+		})
+
+		client, _ := f.NewHTTPClientToNginx(ngxName)
+		resp := client.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
 
 		if resp.Raw().StatusCode != http.StatusOK {
 			log.Errorf("status code is %v, please check logs", resp.Raw().StatusCode)
-			//time.Sleep(time.Hour * 1000)
 			assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
 		}
 		resp.Status(http.StatusOK)
@@ -48,23 +53,54 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		resp.Body().Contains("origin")
 	})
 
-	utils.Case("should be able to proxy inside mesh", func() {
-		_ = f
+	utils.Case("inside mesh should be able to access inside mesh", func() {
+		// Inside NGINX -> Inside HTTPBIN
 
-		name := f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(), true)
+		ngxName := ""
 
-		tunnel := f.NewHTTPClientToNginx(name)
+		utils.ParallelRunAndWait(func() {
+			f.CreateHttpbinInMesh()
+			f.WaitForHttpbinReady()
+		}, func() {
+			ngxName = f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(), true)
+			f.WaitForNginxReady(ngxName)
+		})
 
-		time.Sleep(time.Second * 8)
-		resp := tunnel.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
+		client, _ := f.NewHTTPClientToNginx(ngxName)
+		resp := client.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
 
 		if resp.Raw().StatusCode != http.StatusOK {
 			log.Errorf("status code is %v, please check logs", resp.Raw().StatusCode)
-			//time.Sleep(time.Hour * 1000)
 			assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
 		}
 		resp.Status(http.StatusOK)
 		resp.Headers().Value("Via").Array().Contains("APISIX")
 		resp.Body().Contains("origin")
+	})
+
+	utils.Case("inside mesh curl should be able to access outside mesh", func() {
+		// Inside Curl -> (Outside NGINX -> Outside HTTPBIN)
+
+		ngxName := ""
+
+		httpbinName := "httpbin-outside"
+		f.CreateHttpbinOutsideMesh(httpbinName)
+
+		ngxName = f.CreateNginxOutsideMeshTo(f.GetHttpBinServiceFQDN(httpbinName), false)
+		curl := f.CreateCurl()
+
+		utils.ParallelRunAndWait(func() {
+			f.WaitForNginxReady(ngxName)
+		}, func() {
+			f.WaitForHttpbinReady(httpbinName)
+		}, func() {
+			f.WaitForCurlReady(curl)
+		})
+
+		output := f.CurlInPod(curl, ngxName+"/ip")
+
+		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
+		assert.NotContains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
 	})
 })

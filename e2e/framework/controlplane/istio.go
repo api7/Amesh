@@ -169,6 +169,11 @@ func (cp *istio) Deploy() error {
 func (cp *istio) WaitForReady() error {
 	var err error
 	cp.clusterIP, err = utils.WaitForServiceReady(cp.options.KubectlOpts, cp.options.Namespace, "istiod")
+	if err != nil {
+		return err
+	}
+
+	err = utils.WaitForDeploymentPodsReady(cp.options.KubectlOpts, cp.options.Namespace, "istiod")
 	return err
 }
 

@@ -361,7 +361,8 @@ func (p *xdsProvisioner) GetRoutesFromListener(l *listenerv3.Listener) ([]string
 
 	for _, fc := range l.FilterChains {
 		for _, f := range fc.Filters {
-			if f.Name == xdswellknown.HTTPConnectionManager {
+			switch f.Name {
+			case xdswellknown.HTTPConnectionManager:
 				if f.GetTypedConfig().GetTypeUrl() == _httpConnectManagerV3 {
 					var hcm hcmv3.HttpConnectionManager
 					if err := anypb.UnmarshalTo(f.GetTypedConfig(), &hcm, proto.UnmarshalOptions{}); err != nil {
@@ -388,20 +389,30 @@ func (p *xdsProvisioner) GetRoutesFromListener(l *listenerv3.Listener) ([]string
 						zap.Any("config", f.GetTypedConfig()),
 					)
 				}
-			} else {
-				switch f.Name {
-				case xdswellknown.TCPProxy:
-				case xdswellknown.RateLimit:
-					p.logger.Debugw("unsupported filter",
-						zap.String("name", f.Name),
-						zap.Any("config", f.GetTypedConfig()),
-					)
-				default:
-					p.logger.Warnw("unsupported filter",
-						zap.String("name", f.Name),
-						zap.Any("config", f.GetTypedConfig()),
-					)
-				}
+				break
+			case xdswellknown.Fault:
+				p.logger.Warnw("fault filter is unsupported for now",
+					zap.String("name", f.Name),
+					zap.Any("config", f.GetTypedConfig()),
+				)
+				break
+			case xdswellknown.TCPProxy:
+				p.logger.Debugw("unsupported tcp proxy filter",
+					zap.String("name", f.Name),
+					zap.Any("config", f.GetTypedConfig()),
+				)
+				break
+			case xdswellknown.RateLimit:
+				p.logger.Debugw("unsupported rate limit filter",
+					zap.String("name", f.Name),
+					zap.Any("config", f.GetTypedConfig()),
+				)
+				break
+			default:
+				p.logger.Warnw("unsupported filter",
+					zap.String("name", f.Name),
+					zap.Any("config", f.GetTypedConfig()),
+				)
 			}
 		}
 	}

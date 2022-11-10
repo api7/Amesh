@@ -22,7 +22,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -52,12 +51,36 @@ func (f *Framework) CreateConfigMap(name, key, value string) error {
 	return nil
 }
 
-// CreateResourceFromString creates a Kubernetes resource from the given manifest.
-func (f *Framework) CreateResourceFromString(res string) error {
+// ApplyResourceFromString creates a Kubernetes resource from the given manifest.
+func (f *Framework) ApplyResourceFromString(res string) error {
 	return k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, res)
 }
 
-// CreateResourceFromString deletes a Kubernetes resource from the given manifest.
+func (f *Framework) GetDeploymentPodNames(namespace, name string) ([]string, error) {
+	return f.GetPodNamesByLabel(namespace, "app="+name)
+}
+
+func (f *Framework) GetPodNamesByLabel(namespace string, labelSelector string) ([]string, error) {
+	var names []string
+
+	client, err := k8s.GetKubernetesClientFromOptionsE(ginkgo.GinkgoT(), f.kubectlOpts)
+	if err != nil {
+		return names, err
+	}
+	pods, err := client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
+	if err != nil {
+		return names, err
+	}
+
+	for _, pod := range pods.Items {
+		names = append(names, pod.Name)
+	}
+	return names, nil
+}
+
+// DeleteResourceFromString deletes a Kubernetes resource from the given manifest.
 func (f *Framework) DeleteResourceFromString(res, name string) error {
 	_, err := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "delete", res, name)
 	return err
@@ -68,7 +91,9 @@ func (f *Framework) DeleteResource(resourceType, namespace string, args ...strin
 	cmd = append(cmd, args...)
 	err := k8s.RunKubectlE(f.t, f.kubectlOpts, cmd...)
 
-	log.Info("executing command: kubectl " + strings.Join(cmd, " "))
+	log.SkipFrames(1)
+	defer log.SkipFrames(-1)
+	log.Info("Executing command: kubectl " + strings.Join(cmd, " "))
 	if err != nil {
 		log.Errorw("delete resource failed",
 			zap.Error(err),
@@ -82,6 +107,8 @@ func (f *Framework) DeleteResource(resourceType, namespace string, args ...strin
 
 // DeletePod deletes a Kubernetes pod from the given namespace and name.
 func (f *Framework) DeletePod(namespace, name string) error {
+	log.SkipFrames(1)
+	defer log.SkipFrames(-1)
 	err := f.DeleteResource("pod", namespace, name)
 	return err
 }
@@ -92,11 +119,15 @@ func (f *Framework) DeletePodByLabel(namespace string, labels ...string) error {
 	for _, label := range labels {
 		labelArgs = append(labelArgs, "-l", label)
 	}
+	log.SkipFrames(1)
+	defer log.SkipFrames(-1)
 	err := f.DeleteResource("pod", namespace, labelArgs...)
 	return err
 }
 
 func (f *Framework) WaitForServiceReady(ns, name string) (string, error) {
+	log.SkipFrames(1)
+	defer log.SkipFrames(-1)
 	return utils.WaitForServiceReady(f.kubectlOpts, ns, name)
 }
 
@@ -161,99 +192,15 @@ func (f *Framework) WaitForPodsReady(name string) error {
 	return utils.WaitExponentialBackoff(condFunc)
 }
 
-const (
-	failureToleration = 10
-)
-
 func (f *Framework) WaitForDeploymentPodsReady(name string, namespace ...string) error {
-	opts := metav1.ListOptions{
-		LabelSelector: "app=" + name,
-	}
-
 	ns := f.kubectlOpts.Namespace
 	if len(namespace) > 0 {
 		ns = namespace[0]
 	}
 
-	deploymentFailures := 0
-	podFailures := 0
-	condFunc := func() (bool, error) {
-		if (deploymentFailures + podFailures) >= 2*failureToleration {
-			log.Warnf("waiting %s pods... (%v times)", name, deploymentFailures+podFailures)
-		} else {
-			log.Debugf("waiting %s pods...", name)
-		}
-
-		items, err := k8s.ListPodsE(ginkgo.GinkgoT(), &k8s.KubectlOptions{
-			ContextName:   f.kubectlOpts.ContextName,
-			ConfigPath:    f.kubectlOpts.ConfigPath,
-			Namespace:     ns,
-			Env:           f.kubectlOpts.Env,
-			InClusterAuth: f.kubectlOpts.InClusterAuth,
-		}, opts)
-		if err != nil {
-			return false, err
-		}
-		if len(items) == 0 {
-			if deploymentFailures >= failureToleration {
-				log.Warnf("no %s pods created (%v times)", name, deploymentFailures)
-			} else {
-				log.Debugf("no %s pods created", name)
-			}
-			deploymentFailures++
-			clientset, err := k8s.GetKubernetesClientFromOptionsE(ginkgo.GinkgoT(), f.kubectlOpts)
-			if err != nil {
-				return false, err
-			}
-
-			deployments, err := clientset.AppsV1().Deployments(f.kubectlOpts.Namespace).List(context.Background(), opts)
-			if err != nil {
-				return false, err
-			}
-			if len(deployments.Items) == 0 {
-				log.Debugf("no %s deployment created", name)
-				return false, nil
-			}
-			for _, deployment := range deployments.Items {
-				for _, cond := range deployment.Status.Conditions {
-					if deploymentFailures >= failureToleration {
-						log.Warnf("%v: %v", deployment.Name, cond.Message)
-					} else {
-						log.Debugf("%v: %v", deployment.Name, cond.Message)
-					}
-				}
-			}
-			return false, nil
-		}
-		defer func() { podFailures++ }()
-		for _, pod := range items {
-			found := false
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type != corev1.PodReady {
-					if podFailures >= failureToleration {
-						log.Warnf("pod %s type %s status %s: %s", pod.Name, cond.Type, cond.Status, cond.Message)
-					} else {
-						log.Debugf("pod %s cond %s", pod.Name, cond.Type)
-					}
-					continue
-				}
-				found = true
-				if cond.Status != corev1.ConditionTrue {
-					if podFailures >= failureToleration {
-						log.Warnf("pod %s type %s status %s: %s", pod.Name, cond.Type, cond.Status, cond.Message)
-					} else {
-						log.Debugf("pod %s status %s", pod.Name, cond.Status)
-					}
-					return false, nil
-				}
-			}
-			if !found {
-				return false, nil
-			}
-		}
-		return true, nil
-	}
-	return utils.WaitExponentialBackoff(condFunc)
+	log.SkipFrames(1)
+	defer log.SkipFrames(-1)
+	return utils.WaitForDeploymentPodsReady(f.kubectlOpts, ns, name)
 }
 
 func (f *Framework) WaitForAmeshPluginConfigEvents(name string, typ string, status metav1.ConditionStatus) error {
@@ -275,7 +222,7 @@ func (f *Framework) WaitForAmeshPluginConfigEvents(name string, typ string, stat
 func (f *Framework) GetDeploymentLogs(ns, name string) string {
 	cli, err := k8s.GetKubernetesClientFromOptionsE(f.t, f.kubectlOpts)
 	if err != nil {
-		assert.Nilf(ginkgo.GinkgoT(), err, "get client error: %s", err.Error())
+		utils.AssertNil(err, "get client error: %s", err.Error())
 		return ""
 	}
 

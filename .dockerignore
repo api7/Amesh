@@ -1,6 +1,5 @@
 *.test
 **/*.test
-bin/
 .idea
 .vscode
 .local

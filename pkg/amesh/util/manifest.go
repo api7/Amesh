@@ -18,6 +18,7 @@ import (
 
 	"github.com/api7/amesh/pkg/amesh/types"
 	"github.com/api7/amesh/pkg/apisix"
+	"github.com/api7/amesh/pkg/apisix/utils"
 )
 
 // Manifest collects a couples Routes, Upstreams.
@@ -34,12 +35,12 @@ func (m *Manifest) DiffFrom(m2 *Manifest) (*Manifest, *Manifest, *Manifest) {
 		deleted Manifest
 	)
 
-	a, d, u := apisix.CompareRoutes(m.Routes, m2.Routes)
+	a, d, u := utils.CompareRoutes(m.Routes, m2.Routes)
 	added.Routes = append(added.Routes, a...)
 	updated.Routes = append(updated.Routes, u...)
 	deleted.Routes = append(deleted.Routes, d...)
 
-	au, du, uu := apisix.CompareUpstreams(m.Upstreams, m2.Upstreams)
+	au, du, uu := utils.CompareUpstreams(m.Upstreams, m2.Upstreams)
 	added.Upstreams = append(added.Upstreams, au...)
 	updated.Upstreams = append(updated.Upstreams, uu...)
 	deleted.Upstreams = append(deleted.Upstreams, du...)

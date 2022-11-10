@@ -15,6 +15,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/user"
@@ -29,6 +30,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -43,6 +45,11 @@ func RenderManifest(manifest string, data any) (string, error) {
 		return "", err
 	}
 	return artifact.String(), nil
+}
+
+// TODO: automatically recover assertion failure
+func RetryUntilTimeout(condFunc func() (bool, error)) error {
+	return wait.PollImmediate(time.Second*5, time.Second*30, condFunc)
 }
 
 func WaitExponentialBackoff(condFunc func() (bool, error)) error {
@@ -79,6 +86,104 @@ func WaitForServiceReady(kubectlOpts *k8s.KubectlOptions, ns, name string) (stri
 	}
 
 	return svc.Spec.ClusterIP, nil
+}
+
+const (
+	failureToleration = 10
+)
+
+func WaitForDeploymentPodsReady(kubectlOpts *k8s.KubectlOptions, namespace, name string) error {
+	opts := metav1.ListOptions{
+		LabelSelector: "app=" + name,
+	}
+
+	deploymentFailures := 0
+	podFailures := 0
+	condFunc := func() (bool, error) {
+		if (deploymentFailures + podFailures) >= 2*failureToleration {
+			log.Warnf("waiting %s pods... (%v times)", name, deploymentFailures+podFailures)
+		} else {
+			log.Debugf("waiting %s pods...", name)
+		}
+
+		allItems, err := k8s.ListPodsE(ginkgo.GinkgoT(), &k8s.KubectlOptions{
+			ContextName:   kubectlOpts.ContextName,
+			ConfigPath:    kubectlOpts.ConfigPath,
+			Namespace:     namespace,
+			Env:           kubectlOpts.Env,
+			InClusterAuth: kubectlOpts.InClusterAuth,
+		}, opts)
+		if err != nil {
+			return false, err
+		}
+
+		var items []corev1.Pod
+		for _, item := range allItems {
+			if item.DeletionTimestamp == nil {
+				items = append(items, item)
+			}
+		}
+
+		if len(items) == 0 {
+			if deploymentFailures >= failureToleration {
+				log.Warnf("no %s pods created (%v times)", name, deploymentFailures)
+			} else {
+				log.Debugf("no %s pods created", name)
+			}
+			deploymentFailures++
+			clientset, err := k8s.GetKubernetesClientFromOptionsE(ginkgo.GinkgoT(), kubectlOpts)
+			if err != nil {
+				return false, err
+			}
+
+			deployments, err := clientset.AppsV1().Deployments(kubectlOpts.Namespace).List(context.Background(), opts)
+			if err != nil {
+				return false, err
+			}
+			if len(deployments.Items) == 0 {
+				log.Debugf("no %s deployment created", name)
+				return false, nil
+			}
+			for _, deployment := range deployments.Items {
+				for _, cond := range deployment.Status.Conditions {
+					if deploymentFailures >= failureToleration {
+						log.Warnf("%v: %v", deployment.Name, cond.Message)
+					} else {
+						log.Debugf("%v: %v", deployment.Name, cond.Message)
+					}
+				}
+			}
+			return false, nil
+		}
+		defer func() { podFailures++ }()
+		for _, pod := range items {
+			found := false
+			for _, cond := range pod.Status.Conditions {
+				if cond.Type != corev1.PodReady {
+					if podFailures >= failureToleration {
+						log.Warnf("pod %s type %s status %s: %s", pod.Name, cond.Type, cond.Status, cond.Message)
+					} else {
+						log.Debugf("pod %s cond %s", pod.Name, cond.Type)
+					}
+					continue
+				}
+				found = true
+				if cond.Status != corev1.ConditionTrue {
+					if podFailures >= failureToleration {
+						log.Warnf("pod %s type %s status %s: %s", pod.Name, cond.Type, cond.Status, cond.Message)
+					} else {
+						log.Debugf("pod %s status %s", pod.Name, cond.Status)
+					}
+					return false, nil
+				}
+			}
+			if !found {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+	return WaitExponentialBackoff(condFunc)
 }
 
 // GetKubeConfig returns the kubeconfig file path.
@@ -148,6 +253,13 @@ func FCase(name string, f func()) {
 	ginkgo.FIt(name, caseWrapper(name, f), ginkgo.Offset(1))
 }
 
+func SCase(name string, f func()) {
+	ginkgo.It(name, caseWrapper(name, func() {
+		ginkgo.Skip("Temporary Skip")
+		f()
+	}), ginkgo.Offset(1))
+}
+
 func IgnorePanic(f func()) {
 	defer ginkgo.GinkgoRecover()
 	defer func() {
@@ -165,12 +277,17 @@ func IgnorePanic(f func()) {
 
 func AssertNil(err error, msg ...interface{}) {
 	if err != nil {
-		log.SkipFramesOnce(1)
-		errorMsg := fmt.Sprintf("ERROR: %v", err.Error())
+		errMsg := err.Error()
 		if len(msg) > 0 {
-			errorMsg += ", " + fmt.Sprintf(msg[0].(string), msg[1:]...)
+			errMsg = fmt.Sprintf(msg[0].(string), msg[1:]...) + " failed: " + errMsg
 		}
-		log.Errorf(errorMsg)
+		log.SkipFramesOnce(1)
+		log.Errorf(errMsg)
+		//time.Sleep(time.Hour)
 	}
 	assert.Nil(ginkgo.GinkgoT(), err, msg...)
+}
+
+func PtrOf[T any](v T) *T {
+	return &v
 }

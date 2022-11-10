@@ -29,6 +29,7 @@ import (
 	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	discoveryv3 "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	"github.com/fatih/color"
 	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/genproto/googleapis/rpc/status"
@@ -42,6 +43,10 @@ import (
 	"github.com/api7/amesh/pkg/apisix"
 	"github.com/api7/amesh/pkg/version"
 	"github.com/api7/amesh/pkg/xds"
+)
+
+var (
+	_ types.Provisioner = (*xdsProvisioner)(nil)
 )
 
 type xdsProvisioner struct {
@@ -67,10 +72,15 @@ type xdsProvisioner struct {
 	routesLock sync.RWMutex
 	// last state of routes.
 	routes []*apisix.Route
+
+	upstreamsLock sync.RWMutex
 	// last state of upstreams.
 	// map is necessary since EDS requires the original cluster
 	// by the name.
+	// clusterName -> ApisixUpstream
 	upstreams map[string]*apisix.Upstream
+
+	edsRequestLock sync.RWMutex
 	// this map enrolls all clusters that require further EDS requests.
 	edsRequiredClusters util.StringSet
 
@@ -161,6 +171,38 @@ func (p *xdsProvisioner) Status() (string, error) {
 	return string(str), err
 }
 
+func (p *xdsProvisioner) GetData(dataType string) (string, error) {
+	switch dataType {
+	case "routes":
+		routes := map[string]*apisix.Route{}
+		p.routesLock.RLock()
+		for _, route := range p.routes {
+			routes[route.Id] = route
+		}
+		p.routesLock.RUnlock()
+
+		data, err := json.MarshalIndent(routes, "", "  ")
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	case "upstreams":
+		upstreams := map[string]*apisix.Upstream{}
+		p.upstreamsLock.RLock()
+		for _, upstream := range p.upstreams {
+			upstreams[upstream.Id] = upstream
+		}
+		p.upstreamsLock.RUnlock()
+
+		data, err := json.MarshalIndent(upstreams, "", "  ")
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
+	return fmt.Sprintf(`{"error": "unknown data type %s"}`, dataType), nil
+}
+
 func (p *xdsProvisioner) EventsChannel() <-chan []types.Event {
 	return p.evChan
 }
@@ -198,8 +240,27 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 			time.Sleep(time.Second * 5)
 			continue
 		}
+		p.connected = true
+		p.logger.Info("xds connected")
+
+		clientCtx, clientCancel := context.WithCancel(context.Background())
+		client, err := discoveryv3.NewAggregatedDiscoveryServiceClient(conn).StreamAggregatedResources(clientCtx)
+		if err != nil {
+			cancel()
+			clientCancel()
+
+			// TODO: retry create client without reconnect xds?
+			p.logger.Errorw("failed to create ads client",
+				zap.Error(err),
+				zap.String("xds_source", p.src),
+			)
+			time.Sleep(time.Second * 5)
+			continue
+		}
+
 		cleanup := func() {
 			cancel()
+			clientCancel()
 			if err := conn.Close(); err != nil {
 				p.logger.Errorw("failed to close gRPC connection to XDS config source",
 					zap.Error(err),
@@ -207,11 +268,7 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 				)
 			}
 		}
-
-		p.connected = true
-		p.logger.Info("xds connected") // TODO: appears twice in log
-
-		if err := p.run(stop, conn); err != nil {
+		if err := p.run(stop, client); err != nil {
 			p.ready = false
 			cleanup()
 			p.logger.Errorw("failed to run provisioner",
@@ -239,12 +296,7 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 	}
 }
 
-func (p *xdsProvisioner) run(stop <-chan struct{}, conn *grpc.ClientConn) error {
-	client, err := discoveryv3.NewAggregatedDiscoveryServiceClient(conn).StreamAggregatedResources(context.Background())
-	if err != nil {
-		return err
-	}
-
+func (p *xdsProvisioner) run(stop <-chan struct{}, client discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient) error {
 	go func() {
 		for {
 			select {
@@ -261,27 +313,56 @@ func (p *xdsProvisioner) run(stop <-chan struct{}, conn *grpc.ClientConn) error 
 	go p.translateLoop(stop)
 	go p.firstSend()
 
+	go func() {
+		timer := time.NewTimer(time.Second * 10)
+		for {
+			select {
+			case <-stop:
+				return
+			case <-timer.C:
+				dr := &discoveryv3.DiscoveryRequest{
+					Node:    p.node,
+					TypeUrl: types.ClusterUrl,
+				}
+				p.logger.Debugw(color.BlueString("sending periodic sync discovery request"),
+					zap.String("type_url", dr.TypeUrl),
+				)
+				p.sendCh <- dr
+				timer.Reset(time.Second * 10)
+			}
+		}
+	}()
+
 	p.ready = true
 	return nil
 }
 
 func (p *xdsProvisioner) firstSend() {
-	dr1 := &discoveryv3.DiscoveryRequest{
-		Node:    p.node,
-		TypeUrl: types.ListenerUrl,
+	drs := []*discoveryv3.DiscoveryRequest{
+		{
+			Node:    p.node,
+			TypeUrl: types.ListenerUrl,
+		},
+		{
+			Node:    p.node,
+			TypeUrl: types.ClusterUrl,
+		},
+		//{
+		//	Node:    p.node,
+		//	TypeUrl: types.RouteConfigurationUrl,
+		//},
+		//{
+		//	Node:    p.node,
+		//	TypeUrl: types.ClusterLoadAssignmentUrl,
+		//},
 	}
-	dr2 := &discoveryv3.DiscoveryRequest{
-		Node:    p.node,
-		TypeUrl: types.ClusterUrl,
-	}
-	//dr3 := &discoveryv3.DiscoveryRequest{
-	//	Node:    p.node,
-	//	TypeUrl: types.RouteConfigurationUrl,
-	//}
 
-	p.sendCh <- dr1
-	p.sendCh <- dr2
-	p.logger.Debugw("sent initial discovery requests for listeners and clusters")
+	for _, dr := range drs {
+		p.logger.Debugw("sending initial discovery request",
+			zap.String("type_url", dr.TypeUrl),
+		)
+		p.sendCh <- dr
+	}
 }
 
 // sendLoop receives pending DiscoveryRequest objects and sends them to client.
@@ -363,13 +444,26 @@ func (p *xdsProvisioner) translateLoop(stop <-chan struct{}) {
 				TypeUrl:       resp.TypeUrl,
 				ResponseNonce: resp.Nonce,
 			}
-			if err := p.translate(resp); err != nil {
+
+			resourceNames, err := p.translate(resp)
+			if err != nil {
+				p.logger.Errorw(color.RedString("failed to translate response"),
+					zap.Error(err),
+					zap.String("type", resp.GetTypeUrl()),
+				)
 				ackReq.ErrorDetail = &status.Status{
 					Code:    int32(code.Code_INVALID_ARGUMENT),
 					Message: err.Error(),
 				}
 			} else {
-				verInfo = resp.VersionInfo
+				verInfo = resp.GetVersionInfo()
+				if len(resourceNames) > 0 {
+					ackReq.ResourceNames = resourceNames
+					p.logger.Debugw(color.MagentaString("Ack resources"),
+						zap.String("typeURL", resp.TypeUrl),
+						zap.Strings("resource", resourceNames),
+					)
+				}
 			}
 			ackReq.VersionInfo = verInfo
 			p.sendCh <- ackReq
@@ -377,29 +471,84 @@ func (p *xdsProvisioner) translateLoop(stop <-chan struct{}) {
 	}
 }
 
-func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
+func (p *xdsProvisioner) ignoreEds(clusterName string) bool {
+	// TODO process this
+	xdsSrc := p.src
+	xdsSrc = strings.TrimPrefix(xdsSrc, "grpc://")
+	xdsSrc = strings.Split(xdsSrc, ":")[0]
+	ignoredClusterNames := []string{
+		"BlackHoleCluster",
+		"PassthroughCluster",
+		"InboundPassthroughCluster", // InboundPassthroughClusterIpv4
+		"kubernetes.default.svc.cluster.local",
+		"kube-system.svc.cluster.local",
+		"istio-system.svc.cluster.local",
+		xdsSrc,
+	}
+
+	for _, ignoredClusterName := range ignoredClusterNames {
+		if strings.Contains(clusterName, ignoredClusterName) {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) ([]string, error) {
 	var (
 		// Since the type url is fixed, only one field is filled in newManifest and oldManifest.
 		newManifest util.Manifest
 		oldManifest util.Manifest
 		events      []types.Event
+
+		resourceNames []string
 	)
 	// As we use ADS, the TypeUrl field indicates the resource type already.
 	switch resp.GetTypeUrl() {
 	case types.RouteConfigurationUrl:
+		p.logger.Debugw(color.BlueString("recv RDS"),
+			zap.Any("resp", resp),
+		)
 		for _, res := range resp.GetResources() {
-			partial, err := p.processRouteConfigurationV3(res)
+			var route routev3.RouteConfiguration
+			err := anypb.UnmarshalTo(res, &route, proto.UnmarshalOptions{
+				DiscardUnknown: true,
+			})
+
+			p.logger.Debugw(color.GreenString("process route configurations"),
+				zap.Any("route", &route),
+			)
+
 			if err != nil {
-				return err
+				p.logger.Errorw("found invalid RouteConfiguration resource",
+					zap.Error(err),
+					zap.Any("resource", res),
+				)
+				return nil, err
 			}
+
+			partial, err := p.processRouteConfigurationV3(&route)
+			if err != nil {
+				p.logger.Errorw("failed to process RouteConfiguration",
+					zap.Error(err),
+					zap.Any("resource", res),
+				)
+				continue
+			}
+
+			resourceNames = append(resourceNames, route.Name)
 			newManifest.Routes = append(newManifest.Routes, partial...)
 		}
 		if p.staticRouteConfigurations != nil {
 			partial, err := p.processStaticRouteConfigurations(p.staticRouteConfigurations)
 			if err != nil {
-				return err
+				p.logger.Errorw("failed to process StaticRouteConfiguration",
+					zap.Error(err),
+					zap.Any("resource", p.staticRouteConfigurations),
+				)
+			} else {
+				newManifest.Routes = append(newManifest.Routes, partial...)
 			}
-			newManifest.Routes = append(newManifest.Routes, partial...)
 		}
 		p.routesLock.Lock()
 		oldManifest.Routes = p.routes
@@ -408,6 +557,14 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 
 	case types.ClusterUrl:
 		newUps := make(map[string]*apisix.Upstream)
+		p.edsRequestLock.Lock()
+		defer p.edsRequestLock.Unlock()
+		p.upstreamsLock.Lock()
+		defer p.upstreamsLock.Unlock()
+
+		p.logger.Debugw(color.BlueString("recv CDS"),
+			zap.Any("resp", resp),
+		)
 		oldEdsRequiredClusters := p.edsRequiredClusters
 		p.edsRequiredClusters = util.StringSet{}
 		for _, res := range resp.GetResources() {
@@ -416,45 +573,73 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 				DiscardUnknown: true,
 			})
 			if err != nil {
-				p.logger.Errorw("unmarshal cluster failed",
+				p.logger.Errorw("unmarshal cluster failed, skipped",
 					zap.Error(err),
 					zap.Any("resource", res),
 				)
-				return err
+				continue
 			}
-			p.logger.Debugw("got cluster response",
+			p.logger.Debugw(color.GreenString("process cluster response"),
 				zap.Any("cluster", &cluster),
 			)
 
 			ups, err := p.TranslateCluster(&cluster)
 			if err != nil {
-				p.logger.Warnw("failed to translate Cluster to APISIX upstreams",
-					zap.Error(err),
-					zap.Any("cluster", res),
-				)
+				if err == types.ErrorRequireFurtherEDS {
+					ignored := p.ignoreEds(cluster.Name)
+
+					if !ignored {
+						p.edsRequiredClusters.Add(cluster.Name)
+					}
+					p.logger.Debugw(color.CyanString("require further EDS"),
+						zap.Any("cluster", res),
+					)
+				} else {
+					p.logger.Warnw("failed to translate Cluster to APISIX upstreams",
+						zap.Error(err),
+						zap.Any("cluster", res),
+					)
+				}
 				continue
 			}
 			if cluster.GetType() == clusterv3.Cluster_EDS {
 				p.edsRequiredClusters.Add(cluster.Name)
+
+				// use old upstream to avoid empty Nodes before EDS request returns
+				// otherwise, every Cluster process, the Nodes will be deleted,
+				// and every CLA process, the Nodes wll be generated
+				if oldUps, ok := p.upstreams[cluster.Name]; ok && len(oldUps.Nodes) > 0 {
+					newManifest.Upstreams = append(newManifest.Upstreams, oldUps)
+				}
+			} else if len(ups.Nodes) > 0 {
+				newManifest.Upstreams = append(newManifest.Upstreams, ups)
 			}
-			newManifest.Upstreams = append(newManifest.Upstreams, ups)
 			newUps[ups.Name] = ups
 		}
 		// TODO Refactor util.Manifest to just use map.
 		for _, ups := range p.upstreams {
-			oldManifest.Upstreams = append(oldManifest.Upstreams, ups)
+			if len(ups.Nodes) > 0 {
+				oldManifest.Upstreams = append(oldManifest.Upstreams, ups)
+			}
 		}
 		p.upstreams = newUps
-		if !p.edsRequiredClusters.Equals(oldEdsRequiredClusters) {
-			p.logger.Infow("new EDS discovery request",
-				zap.Any("old_eds_required_clusters", oldEdsRequiredClusters),
-				zap.Any("eds_required_clusters", p.edsRequiredClusters),
-			)
-			p.sendEds(p.edsRequiredClusters)
-		}
+
+		// We don't have any cache-invalidate mechanics yet, so shouldn't check it
+		//if !p.edsRequiredClusters.Equals(oldEdsRequiredClusters) {
+		p.logger.Infow("new EDS discovery request",
+			zap.Any("old_eds_required_clusters", oldEdsRequiredClusters),
+			zap.Any("eds_required_clusters", p.edsRequiredClusters),
+		)
+		go p.sendEds(p.edsRequiredClusters)
+		//}
 	case types.ClusterLoadAssignmentUrl:
 		requireFurtherEds := util.StringSet{}
 
+		p.logger.Debugw(color.BlueString("recv CLA"),
+			zap.Any("resp", resp),
+		)
+		p.upstreamsLock.Lock()
+		defer p.upstreamsLock.Unlock()
 		for _, res := range resp.GetResources() {
 			var cla endpointv3.ClusterLoadAssignment
 			err := anypb.UnmarshalTo(res, &cla, proto.UnmarshalOptions{
@@ -468,38 +653,27 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 				continue
 			}
 
-			p.logger.Debugw("got cluster load assignment response",
+			p.logger.Debugw(color.GreenString("process cluster load assignment response"),
 				zap.Any("cla", &cla),
 			)
 
 			ups, err := p.processClusterLoadAssignmentV3(&cla)
-			if err == ErrorRequireFurtherEDS {
-				// TODO process this
-				xdsSrc := p.src
-				xdsSrc = strings.TrimPrefix(xdsSrc, "grpc://")
-				xdsSrc = strings.Split(xdsSrc, ":")[0]
-				ignoredClusterName := []string{
-					"kubernetes.default.svc.cluster.local",
-					"kube-system.svc.cluster.local",
-					"istio-system.svc.cluster.local",
-					xdsSrc,
-				}
+			if err == types.ErrorRequireFurtherEDS {
+				ignored := p.ignoreEds(cla.ClusterName)
 
-				ignored := false
-				for _, clusterName := range ignoredClusterName {
-					if strings.Contains(cla.ClusterName, clusterName) {
-						ignored = true
-						break
-					}
-				}
 				if !ignored {
 					requireFurtherEds.Add(cla.ClusterName)
 				}
 				continue
 			}
 			if err != nil {
-				return err
+				p.logger.Errorw(color.RedString("failed to translate ClusterLoadAssignment, skipped"),
+					zap.Error(err),
+					zap.Any("cla", &cla),
+				)
+				continue
 			}
+			resourceNames = append(resourceNames, cla.ClusterName)
 			p.upstreams[ups.Name] = ups
 			newManifest.Upstreams = append(newManifest.Upstreams, ups)
 		}
@@ -509,7 +683,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			p.logger.Infow("empty endpoint, new EDS discovery request",
 				zap.Any("eds_required_clusters", requireFurtherEds),
 			)
-			p.sendEds(requireFurtherEds)
+			go p.sendEds(requireFurtherEds)
 		}
 	case types.ListenerUrl:
 		var (
@@ -517,17 +691,20 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			staticConfigs []*routev3.RouteConfiguration
 		)
 		routeOwnership := make(map[string]string)
+		p.logger.Debugw(color.BlueString("recv LDS"),
+			zap.Any("resp", resp),
+		)
 		for _, res := range resp.GetResources() {
 			var listener listenerv3.Listener
 			if err := anypb.UnmarshalTo(res, &listener, proto.UnmarshalOptions{}); err != nil {
-				p.logger.Errorw("failed to unmarshal listener v3",
+				p.logger.Errorw("failed to unmarshal listener",
 					zap.Error(err),
 					zap.Any("response", res),
 				)
-				return err
+				continue
 			}
 
-			p.logger.Debugw("got listener response",
+			p.logger.Debugw(color.GreenString("process listener response"),
 				zap.Any("listener", &listener),
 			)
 
@@ -540,7 +717,11 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 			addr := fmt.Sprintf("%s:%d", sockAddr.GetAddress(), sockAddr.GetPortValue())
 			names, cfgs, err := p.GetRoutesFromListener(&listener)
 			if err != nil {
-				return err
+				p.logger.Errorw("failed to get routes from listener",
+					zap.Error(err),
+					zap.Any("listener", &listener),
+				)
+				continue
 			}
 			rdsNames = append(rdsNames, names...)
 			staticConfigs = append(staticConfigs, cfgs...)
@@ -553,17 +734,18 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 		}
 		p.staticRouteConfigurations = staticConfigs
 		p.routeOwnership = routeOwnership
-		p.sendRds(rdsNames)
+		go p.sendRds(rdsNames)
 	default:
 		p.logger.Debugw("got unsupported discovery response type",
 			zap.String("type", resp.TypeUrl),
 			zap.Any("body", resp),
 		)
-		return errors.New("UnknownResourceTypeUrl")
+		return resourceNames, errors.New("UnknownResourceTypeUrl")
 	}
 
 	// Always generate update event for EDS.
 	if resp.GetTypeUrl() == types.ClusterLoadAssignmentUrl {
+		p.logger.Debugw("refresh ClusterLoadAssignment endpoints")
 		for _, ups := range newManifest.Upstreams {
 			events = append(events, types.Event{
 				Type:   types.EventUpdate,
@@ -578,7 +760,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) error {
 	go func() {
 		p.evChan <- events
 	}()
-	return nil
+	return resourceNames, nil
 }
 
 func (p *xdsProvisioner) sendEds(edsRequests util.StringSet) {
@@ -588,7 +770,7 @@ func (p *xdsProvisioner) sendEds(edsRequests util.StringSet) {
 		TypeUrl:       types.ClusterLoadAssignmentUrl,
 		ResourceNames: edsRequests.Strings(),
 	}
-	p.logger.Debugw("sending EDS discovery request",
+	p.logger.Debugw(color.CyanString("sending EDS discovery request"),
 		zap.Any("body", dr),
 	)
 	p.sendCh <- dr
@@ -603,14 +785,14 @@ func (p *xdsProvisioner) sendRds(rdsNames []string) {
 		TypeUrl:       types.RouteConfigurationUrl,
 		ResourceNames: rdsNames,
 	}
-	p.logger.Debugw("sending RDS discovery request",
+	p.logger.Debugw(color.CyanString("sending RDS discovery request"),
 		zap.Any("body", dr),
 	)
 	p.sendCh <- dr
 }
 
 func (p *xdsProvisioner) generateIncrementalEvents(newManifest, oldManifest *util.Manifest) []types.Event {
-	p.logger.Debugw("comparing old and new manifests",
+	p.logger.Debugw(color.CyanString("comparing old and new manifests"),
 		zap.Any("old", oldManifest),
 		zap.Any("new", newManifest),
 	)
@@ -637,11 +819,11 @@ func (p *xdsProvisioner) generateIncrementalEvents(newManifest, oldManifest *uti
 		count += updated.Size()
 	}
 	if count == 0 {
-		p.logger.Debugw("old and new manifests are exactly same")
+		p.logger.Debugw(color.CyanString("old and new manifests are exactly same"))
 		return nil
 	}
 
-	p.logger.Debugw("found changes (after converting to APISIX resources)",
+	p.logger.Debugw(color.CyanString("found changes (after converting to APISIX resources)"),
 		zap.Any("added", added),
 		zap.Any("updated", updated),
 		zap.Any("deleted", deleted),

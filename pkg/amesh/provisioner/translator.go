@@ -20,37 +20,22 @@ import (
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	endpointv3 "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
+	"github.com/fatih/color"
 	"github.com/golang/protobuf/ptypes/any"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/api7/amesh/pkg/amesh/types"
 	"github.com/api7/amesh/pkg/apisix"
 )
 
-func (p *xdsProvisioner) processRouteConfigurationV3(res *any.Any) ([]*apisix.Route, error) {
-	var route routev3.RouteConfiguration
-	err := anypb.UnmarshalTo(res, &route, proto.UnmarshalOptions{
-		DiscardUnknown: true,
-	})
-
-	p.logger.Debugw("got route response",
-		zap.Any("route", &route),
-	)
-
-	if err != nil {
-		p.logger.Errorw("found invalid RouteConfiguration resource",
-			zap.Error(err),
-			zap.Any("resource", res),
-		)
-		return nil, err
-	}
-
-	routes, err := p.TranslateRouteConfiguration(&route, p.routeOwnership)
+func (p *xdsProvisioner) processRouteConfigurationV3(route *routev3.RouteConfiguration) ([]*apisix.Route, error) {
+	routes, err := p.TranslateRouteConfiguration(route, p.routeOwnership)
 	if err != nil {
 		p.logger.Errorw("failed to translate RouteConfiguration to APISIX routes",
 			zap.Error(err),
-			zap.Any("route", &route),
+			zap.Any("route", route),
 		)
 		return nil, err
 	}
@@ -62,7 +47,7 @@ func (p *xdsProvisioner) processStaticRouteConfigurations(rcs []*routev3.RouteCo
 		routes []*apisix.Route
 	)
 	for _, rc := range rcs {
-		p.logger.Debugw("got static route response",
+		p.logger.Debugw(color.GreenString("process static route configurations"),
 			zap.Any("static_route", rc),
 		)
 		route, err := p.TranslateRouteConfiguration(rc, p.routeOwnership)
@@ -89,7 +74,7 @@ func (p *xdsProvisioner) processClusterV3(res *any.Any) (*apisix.Upstream, error
 		)
 		return nil, err
 	}
-	p.logger.Debugw("got cluster response",
+	p.logger.Debugw(color.GreenString("process cluster configurations"),
 		zap.Any("cluster", &cluster),
 	)
 
@@ -111,7 +96,7 @@ func (p *xdsProvisioner) processClusterLoadAssignmentV3(cla *endpointv3.ClusterL
 	}
 
 	nodes, err := p.TranslateClusterLoadAssignment(cla)
-	if err == ErrorRequireFurtherEDS {
+	if err == types.ErrorRequireFurtherEDS {
 		return nil, err
 	}
 	if err != nil {
@@ -134,6 +119,5 @@ func (p *xdsProvisioner) processClusterLoadAssignmentV3(cla *endpointv3.ClusterL
 	}
 
 	newUps.Nodes = nodes
-	p.upstreams[cla.ClusterName] = &newUps
 	return &newUps, nil
 }

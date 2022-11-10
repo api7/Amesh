@@ -29,26 +29,13 @@ import (
 )
 
 const (
-	nginxConfTemplate = `
-server {
-	listen 80;
-	server_name test.com;
-	location / {
-		proxy_pass http://%s;
-		proxy_set_header Host %s;
-		proxy_http_version 1.1;
-		proxy_set_header Connection "";
-	}
-}
-`
-
 	nginxTemplate = `
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Name }}
 spec:
-  replicas: 1
+  replicas: {{ .Replicas }}
   selector:
     matchLabels:
       app: {{ .Name }}
@@ -63,7 +50,7 @@ spec:
       volumes:
       - name: conf
         configMap:
-          name: {{ .ConfigMap }}
+          name: {{ .ConfigMapName }}
       containers:
       - name: nginx
         image: {{ .LocalRegistry }}/nginx:1.19.3
@@ -87,40 +74,137 @@ spec:
   - name: http
     targetPort: 80
     port: 80
-    protocol: TCP`
+    protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .ConfigMapName }}
+data:
+  proxy.conf: |
+    server {
+        listen 80;
+        server_name test.com;
+        location / {
+            proxy_pass http://{{ .ProxyService }};
+            proxy_set_header Host {{ .ProxyService }};
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+        }
+    }
+`
 )
 
-type renderArgs struct {
+type NginxArgs struct {
 	*ManifestArgs
-	Name      string
-	ConfigMap string
-	InMesh    bool
+	Name          string
+	ConfigMapName string
+	InMesh        bool
+	Replicas      int
+	ProxyService  string
+}
+
+func (f *Framework) getNginxArgs(name string) *NginxArgs {
+	if args, ok := f.appArgs[name]; ok {
+		if nginxArgs, ok := args.(*NginxArgs); ok {
+			return nginxArgs
+		} else {
+			ginkgo.Fail(fmt.Sprintf("failed to convert config to nginx args: %s", name), 1)
+		}
+	} else {
+		ginkgo.Fail(fmt.Sprintf("failed to get nginx args: %s", name), 1)
+	}
+
+	return nil
 }
 
 func (f *Framework) CreateNginxOutsideMeshTo(svc string, waitReady bool) string {
 	log.Infof("Create NGINX outside Mesh to " + svc)
-	return f.createNginxTo(svc, false, waitReady)
+	return f.createNginxTo(f.args.LocalRegistry, svc, false, waitReady)
 }
 
 func (f *Framework) CreateNginxInMeshTo(svc string, waitReady bool) string {
 	log.Infof("Create NGINX in Mesh to " + svc)
-	return f.createNginxTo(svc, true, waitReady)
+	return f.createNginxTo(f.args.LocalRegistry, svc, true, waitReady)
 }
 
-func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) string {
+func (f *Framework) CreateUnavailableNginxOutsideMeshTo(svc string, waitReady bool) string {
+	log.Infof("Create unavailable NGINX outside Mesh to " + svc)
+	return f.createNginxTo("unknown-registry", svc, false, waitReady)
+}
 
-	conf := fmt.Sprintf(nginxConfTemplate, svc, svc)
+func (f *Framework) CreateUnavailableNginxInMeshTo(svc string, waitReady bool) string {
+	log.Infof("Create unavailable NGINX in Mesh to " + svc)
+	return f.createNginxTo("unknown-registry", svc, true, waitReady)
+}
 
+func (f *Framework) MakeNginxInsideMesh(name string, waitReady bool) {
+	args := f.getNginxArgs(name)
+	args.InMesh = true
+	f.appArgs[name] = args
+
+	f.applyNginx(args, waitReady)
+}
+
+func (f *Framework) MakeNginxOutsideMesh(name string, waitReady bool) {
+	args := f.getNginxArgs(name)
+	args.InMesh = false
+	f.appArgs[name] = args
+
+	f.applyNginx(args, waitReady)
+}
+
+func (f *Framework) MakeNginxUnavailable(name string) {
+	args := f.getNginxArgs(name)
+	newArgs := &NginxArgs{
+		ManifestArgs: &ManifestArgs{
+			LocalRegistry: "unknown-registry",
+		},
+		Name:          args.Name,
+		ConfigMapName: args.ConfigMapName,
+		InMesh:        args.InMesh,
+		Replicas:      args.Replicas,
+		ProxyService:  args.ProxyService,
+	}
+
+	f.applyNginx(newArgs, false)
+}
+
+func (f *Framework) MakeNginxAvailable(name string, waitReady bool) {
+	args := f.getNginxArgs(name)
+	args.LocalRegistry = f.args.LocalRegistry
+	f.applyNginx(args, waitReady)
+}
+
+func (f *Framework) ScaleNginx(name string, replicas int, waitReady bool) {
+	args := f.getNginxArgs(name)
+	args.Replicas = replicas
+	f.appArgs[name] = args
+
+	f.applyNginx(args, waitReady)
+}
+
+func (f *Framework) createNginxTo(registry, svc string, inMesh bool, waitReady bool) string {
 	randomName := fmt.Sprintf("ngx-%d", time.Now().Nanosecond())
 
-	utils.AssertNil(f.CreateConfigMap(randomName, "proxy.conf", conf), "create config map "+randomName)
-
-	args := &renderArgs{
-		ManifestArgs: f.args,
-		Name:         randomName,
-		ConfigMap:    randomName,
-		InMesh:       inMesh,
+	args := &NginxArgs{
+		ManifestArgs: &ManifestArgs{
+			LocalRegistry: registry,
+		},
+		Name:          randomName,
+		ConfigMapName: randomName,
+		InMesh:        inMesh,
+		Replicas:      1,
+		ProxyService:  svc,
 	}
+	f.appArgs[randomName] = args
+	f.applyNginx(args, waitReady)
+
+	return randomName
+}
+
+// applyNginx doesn't record the appArgs
+func (f *Framework) applyNginx(args *NginxArgs, waitReady bool) {
 	artifact, err := utils.RenderManifest(nginxTemplate, args)
 	utils.AssertNil(err, "render nginx template")
 	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
@@ -130,22 +214,22 @@ func (f *Framework) createNginxTo(svc string, inMesh bool, waitReady bool) strin
 	utils.AssertNil(err, "apply nginx")
 
 	if waitReady {
-		f.WaitForNginxReady(randomName)
+		f.WaitForNginxReady(args.Name)
 	}
 
-	return randomName
+	return
 }
 
 func (f *Framework) WaitForNginxReady(name string) {
 	log.Infof("wait for nginx ready")
 	defer utils.LogTimeTrack(time.Now(), "nginx ready (%v)")
-	utils.AssertNil(f.WaitForPodsReady(name), "wait for nginx ready")
+	utils.AssertNil(f.WaitForDeploymentPodsReady(name), "wait for nginx ready")
 }
 
 // NewHTTPClientToNginx creates a http client which sends requests to
 // nginx.
-func (f *Framework) NewHTTPClientToNginx(name string) *httpexpect.Expect {
-	endpoint := f.buildTunnelToNginx(name)
+func (f *Framework) NewHTTPClientToNginx(name string) (*httpexpect.Expect, *k8s.Tunnel) {
+	endpoint, tunnel := f.buildTunnelToNginx(name)
 	u := url.URL{
 		Scheme: "http",
 		Host:   endpoint,
@@ -159,15 +243,15 @@ func (f *Framework) NewHTTPClientToNginx(name string) *httpexpect.Expect {
 			},
 		},
 		Reporter: httpexpect.NewAssertReporter(httpexpect.NewAssertReporter(ginkgo.GinkgoT())),
-	})
+	}), tunnel
 }
 
-func (f *Framework) buildTunnelToNginx(name string) string {
+func (f *Framework) buildTunnelToNginx(name string) (string, *k8s.Tunnel) {
 	tunnel := k8s.NewTunnel(f.kubectlOpts, k8s.ResourceTypeService, name, 12384, 80)
 	err := tunnel.ForwardPortE(ginkgo.GinkgoT())
 	utils.AssertNil(err, "port-forward nginx tunnel")
 
 	f.tunnels = append(f.tunnels, tunnel)
 
-	return tunnel.Endpoint()
+	return tunnel.Endpoint(), tunnel
 }

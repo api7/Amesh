@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package apisix
+package utils
 
 import (
 	"bytes"
@@ -19,12 +19,14 @@ import (
 
 	"github.com/api7/gopkg/pkg/log"
 	"go.uber.org/zap"
+
+	"github.com/api7/amesh/pkg/apisix"
 )
 
 // CompareRoutes diffs two Route array and finds the new adds, updates
 // and deleted ones. Note it stands on the first Route array's point
 // of view.
-func CompareRoutes(r1, r2 []*Route) (added, deleted, updated []*Route) {
+func CompareRoutes(r1, r2 []*apisix.Route) (added, deleted, updated []*apisix.Route) {
 	if r1 == nil {
 		return r2, nil, nil
 	}
@@ -32,8 +34,8 @@ func CompareRoutes(r1, r2 []*Route) (added, deleted, updated []*Route) {
 		return nil, r1, nil
 	}
 
-	r1Map := make(map[string]*Route)
-	r2Map := make(map[string]*Route)
+	r1Map := make(map[string]*apisix.Route)
+	r2Map := make(map[string]*apisix.Route)
 	for _, r := range r1 {
 		r1Map[r.Id] = r
 	}
@@ -68,15 +70,15 @@ func CompareRoutes(r1, r2 []*Route) (added, deleted, updated []*Route) {
 // CompareUpstreams diffs two Upstreams array and finds the new adds, updates
 // and deleted ones. Note it stands on the first Upstream array's point
 // of view.
-func CompareUpstreams(u1, u2 []*Upstream) (added, deleted, updated []*Upstream) {
+func CompareUpstreams(u1, u2 []*apisix.Upstream) (added, deleted, updated []*apisix.Upstream) {
 	if u1 == nil {
 		return u2, nil, nil
 	}
 	if u2 == nil {
 		return nil, u1, nil
 	}
-	u1Map := make(map[string]*Upstream)
-	u2Map := make(map[string]*Upstream)
+	u1Map := make(map[string]*apisix.Upstream)
+	u2Map := make(map[string]*apisix.Upstream)
 	for _, u := range u1 {
 		u1Map[u.Id] = u
 	}
@@ -106,4 +108,40 @@ func CompareUpstreams(u1, u2 []*Upstream) (added, deleted, updated []*Upstream) 
 		}
 	}
 	return
+}
+
+// IsSameNodes checks nodes host, port and weight. It doesn't check metadata.
+func IsSameNodes(nodes1, nodes2 []*apisix.Node) bool {
+	if nodes1 == nil && nodes2 == nil {
+		return true
+	}
+	if nodes1 == nil && nodes2 != nil ||
+		nodes1 != nil && nodes2 == nil {
+		return false
+	}
+	if len(nodes1) != len(nodes2) {
+		return false
+	}
+
+	n1Map := map[string]*apisix.Node{}
+	for _, u := range nodes1 {
+		n1Map[u.Host] = u
+	}
+
+	for _, n2 := range nodes2 {
+		n1, ok := n1Map[n2.Host]
+		if !ok {
+			return false
+		}
+		if n1.Port != n2.Port {
+			return false
+		}
+		if n1.Weight != n2.Weight {
+			return false
+		}
+
+		// TODO: Check metadata
+	}
+
+	return true
 }

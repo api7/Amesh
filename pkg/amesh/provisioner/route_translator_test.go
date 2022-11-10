@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/api7/amesh/pkg/apisix"
+	"github.com/api7/amesh/pkg/apisix/utils"
 )
 
 func TestGetStringMatchValue(t *testing.T) {
@@ -426,7 +427,7 @@ func TestUnstableHostsRouteDiff(t *testing.T) {
 	assert.NotNil(t, routes1)
 	assert.NotNil(t, routes2)
 
-	added, deleted, updated := apisix.CompareRoutes(routes1, routes2)
+	added, deleted, updated := utils.CompareRoutes(routes1, routes2)
 	assert.Nil(t, added)
 	assert.Nil(t, deleted)
 	assert.Nil(t, updated)

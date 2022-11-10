@@ -18,6 +18,7 @@ REGISTRY ?="localhost:5000"
 REQUIRE_REBUILD_IPTABLES_IMAGE ?= true
 REQUIRE_REBUILD_CONTROLLER_IMAGE ?= true
 
+export PREBUILT_AMESH_APISIX_IMAGE ?= api7/amesh-apisix:v0.0.3
 export AMESH_STANDALONE_IMAGE ?= amesh-standalone
 export AMESH_STANDALONE_IMAGE_TAG ?= dev
 export AMESH_SIDECAR_IMAGE ?= amesh-sidecar
@@ -81,8 +82,8 @@ build-apisix-image:
 
 .PHONY: build-amesh-sidecar-image
 build-amesh-sidecar-image: build-amesh-so-image
-	docker pull api7/amesh-apisix:v0.0.2
-	docker tag api7/amesh-apisix:v0.0.2 amesh-apisix:dev
+	docker pull $(PREBUILT_AMESH_APISIX_IMAGE)
+	docker tag $(PREBUILT_AMESH_APISIX_IMAGE) amesh-apisix:dev
 	docker build --build-arg ENABLE_PROXY=$(ENABLE_PROXY) \
 		-f Dockerfiles/amesh-sidecar.Dockerfile \
 		-t $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) .

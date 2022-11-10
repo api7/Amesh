@@ -15,6 +15,7 @@
 package pkg
 
 import (
+	"context"
 	"net"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -37,6 +39,7 @@ var (
 
 type GRPCController struct {
 	protov1.UnimplementedAmeshServiceServer
+	protov1.UnimplementedHealthCheckServiceServer
 	Log logr.Logger
 
 	stopCh       <-chan struct{}
@@ -69,6 +72,9 @@ func NewGRPCController(GRPCServerAddr string, pluginConfigCache types.PodPluginC
 
 	c.grpcSrv = grpc.NewServer(grpc.KeepaliveParams(params))
 	protov1.RegisterAmeshServiceServer(c.grpcSrv, c)
+	protov1.RegisterHealthCheckServiceServer(c.grpcSrv, c)
+
+	reflection.Register(c.grpcSrv)
 
 	return c, nil
 }
@@ -181,4 +187,12 @@ func (c *GRPCController) StreamPlugins(req *protov1.PluginsRequest, srv protov1.
 			return nil
 		}
 	}
+}
+
+func (c *GRPCController) Ping(ctx context.Context, _ *protov1.Empty) (*protov1.HealthCheckResponse, error) {
+	c.Log.Info("Ping")
+
+	return &protov1.HealthCheckResponse{
+		Text: "Pong",
+	}, nil
 }
