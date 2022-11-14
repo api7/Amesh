@@ -16,6 +16,7 @@ package base
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/onsi/ginkgo/v2"
@@ -40,6 +41,7 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 			ngxName = f.CreateNginxOutsideMeshTo(f.GetHttpBinServiceFQDN(), true)
 			f.WaitForNginxReady(ngxName)
 		})
+		time.Sleep(time.Second * 3)
 
 		client, _ := f.NewHTTPClientToNginx(ngxName)
 		resp := client.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
@@ -65,6 +67,7 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 			ngxName = f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(), true)
 			f.WaitForNginxReady(ngxName)
 		})
+		time.Sleep(time.Second * 3)
 
 		client, _ := f.NewHTTPClientToNginx(ngxName)
 		resp := client.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()
@@ -96,6 +99,7 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		}, func() {
 			f.WaitForCurlReady(curl)
 		})
+		time.Sleep(time.Second * 3)
 
 		output := f.CurlInPod(curl, ngxName+"/ip")
 

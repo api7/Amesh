@@ -157,6 +157,8 @@ func (t *BaseTester) ScaleNginx(replica int) {
 // ========================
 
 func (t *BaseTester) ValidateProxiedAndAccessible() {
+	time.Sleep(time.Second * 3)
+
 	output := t.f.CurlInPod(t.CurlPodName, t.NginxDeploymentName+"/ip")
 	assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
 	assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")

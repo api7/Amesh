@@ -189,6 +189,8 @@ func (t *PluginConfigResponseRewriteTester) DeleteAmeshPluginConfig() {
 }
 
 func (t *PluginConfigResponseRewriteTester) ValidateInMeshNginxProxyAccess(withoutHeaders ...string) {
+	time.Sleep(time.Second * 3)
+
 	f := t.f
 	t.waitNginxClient()
 

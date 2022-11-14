@@ -186,6 +186,10 @@ func (f *Framework) deploy() {
 		log.Infof("wait for istio ready")
 		defer utils.LogTimeTrack(time.Now(), "istio ready (%v)")
 		utils.AssertNil(f.cp.WaitForReady(), "wait istio")
+		// FIXME: sometimes get error:
+		// failed calling webhook "namespace.sidecar-injector.istio.io": Post "https://istiod.XXX:443/inject?timeout=10s": dial tcp XXX:443: connect: connection refused
+		// But Istio /ready handler already checked webhook readiness
+		time.Sleep(time.Second * 8)
 	})
 	e.Add(func() {
 		log.Infof("installing amesh-controller")
