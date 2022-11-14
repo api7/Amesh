@@ -15,6 +15,8 @@
 package tester
 
 import (
+	"time"
+
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
@@ -48,6 +50,8 @@ func (t *ReconnectTester) Create() {
 }
 
 func (t *ReconnectTester) ValidateStatusAmeshIsOK() {
+	time.Sleep(time.Second * 3)
+
 	condFunc := func() (bool, error) {
 		return t.f.GetSidecarStatus(t.curlPod).AmeshConnected, nil
 	}
