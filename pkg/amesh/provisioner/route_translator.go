@@ -114,6 +114,8 @@ func (p *xdsProvisioner) translateRouteFilters(xdsRoute *routev3.Route, apisixRo
 				}
 
 				faultPlugin := &apisix.FaultInjection{}
+
+				// abort
 				if fault.Abort != nil {
 					faultPlugin.Abort = &apisix.FaultInjectionAbort{}
 					// status
@@ -130,14 +132,13 @@ func (p *xdsProvisioner) translateRouteFilters(xdsRoute *routev3.Route, apisixRo
 						continue
 					}
 
-					// percentage
 					faultPlugin.Abort.Percentage = p.convertPercentage(fault.Abort.Percentage)
 				}
 
+				// delay
 				if fault.Delay != nil {
 					faultPlugin.Delay = &apisix.FaultInjectionDelay{}
 
-					// status
 					switch v := fault.Delay.FaultDelaySecifier.(type) {
 					case *commonfaultv3.FaultDelay_FixedDelay:
 						faultPlugin.Delay.Duration = v.FixedDelay.Seconds
@@ -151,7 +152,6 @@ func (p *xdsProvisioner) translateRouteFilters(xdsRoute *routev3.Route, apisixRo
 						continue
 					}
 
-					// percentage
 					faultPlugin.Delay.Percentage = p.convertPercentage(fault.Delay.Percentage)
 				}
 
