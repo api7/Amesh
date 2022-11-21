@@ -207,7 +207,7 @@ func (f *Framework) createNginxTo(registry, svc string, inMesh bool, waitReady b
 func (f *Framework) applyNginx(args *NginxArgs, waitReady bool) {
 	artifact, err := utils.RenderManifest(nginxTemplate, args)
 	utils.AssertNil(err, "render nginx template")
-	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
+	err = f.ApplyResourceFromString(artifact)
 	if err != nil {
 		log.Errorf("failed to apply nginx pod: %s", err.Error())
 	}

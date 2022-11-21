@@ -15,15 +15,21 @@ package provisioner
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/api7/gopkg/pkg/id"
 	"github.com/api7/gopkg/pkg/log"
 	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
+	commonfaultv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/common/fault/v3"
+	faultv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/fault/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	matcherv3 "github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3"
+	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	xdswellknown "github.com/envoyproxy/go-control-plane/pkg/wellknown"
+	"github.com/fatih/color"
+	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -36,12 +42,19 @@ import (
 
 const (
 	_httpConnectManagerV3 = "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+
+	_httpFaultV3 = "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault"
+
 	_defaultRoutePriority = 999
 )
 
 func (p *xdsProvisioner) TranslateRouteConfiguration(r *routev3.RouteConfiguration, routeOriginalDest map[string]string) ([]*apisix.Route, error) {
 	var routes []*apisix.Route
 	for _, vhost := range r.GetVirtualHosts() {
+		p.logger.Debugw(color.GreenString("process virtual host"),
+			zap.Any("vhost", vhost),
+		)
+
 		partial, err := p.translateVirtualHost(r.Name, vhost)
 		if err != nil {
 			p.logger.Errorw("failed to translate VirtualHost",
@@ -66,9 +79,104 @@ func (p *xdsProvisioner) TranslateRouteConfiguration(r *routev3.RouteConfigurati
 	return routes, nil
 }
 
-func (p *xdsProvisioner) translateVirtualHost(prefix string, vhost *routev3.VirtualHost) ([]*apisix.Route, error) {
-	if prefix == "" {
-		prefix = "<anon>"
+func (p *xdsProvisioner) convertPercentage(percent *typev3.FractionalPercent) uint32 {
+	if percent == nil {
+		return 0
+	}
+
+	percentage := percent.Numerator / uint32(percent.Denominator)
+	if percentage > 100 {
+		percentage = 100
+	}
+	return percentage
+}
+
+func (p *xdsProvisioner) translateRouteFilters(xdsRoute *routev3.Route, apisixRoute *apisix.Route) error {
+	for filterName, data := range xdsRoute.TypedPerFilterConfig {
+
+		p.logger.Debugw(color.GreenString("process route filter"),
+			zap.Any("filter_type", filterName),
+			zap.Any("config", data),
+		)
+
+		switch filterName {
+		case xdswellknown.Fault:
+			if data.GetTypeUrl() == _httpFaultV3 {
+				log.Infof("got route http.fault filter")
+
+				var fault faultv3.HTTPFault
+				if err := anypb.UnmarshalTo(data, &fault, proto.UnmarshalOptions{}); err != nil {
+					log.Errorw("failed to unmarshal HTTPFault config",
+						zap.Error(err),
+						zap.Any("route", xdsRoute.Name),
+					)
+					continue
+				}
+
+				faultPlugin := &apisix.FaultInjection{}
+				if fault.Abort != nil {
+					faultPlugin.Abort = &apisix.FaultInjectionAbort{}
+					// status
+					switch v := fault.Abort.ErrorType.(type) {
+					case *faultv3.FaultAbort_HttpStatus:
+						faultPlugin.Abort.HttpStatus = v.HttpStatus
+					default:
+						// TODO: other types
+						p.logger.Warnw("unsupported HTTPFault error type",
+							zap.String("typed_url", data.GetTypeUrl()),
+							zap.Any("config", data),
+							zap.Any("type", reflect.TypeOf(v)),
+						)
+						continue
+					}
+
+					// percentage
+					faultPlugin.Abort.Percentage = p.convertPercentage(fault.Abort.Percentage)
+				}
+
+				if fault.Delay != nil {
+					faultPlugin.Delay = &apisix.FaultInjectionDelay{}
+
+					// status
+					switch v := fault.Delay.FaultDelaySecifier.(type) {
+					case *commonfaultv3.FaultDelay_FixedDelay:
+						faultPlugin.Delay.Duration = v.FixedDelay.Seconds
+					default:
+						// TODO: other types
+						p.logger.Warnw("unsupported HTTPFault error type",
+							zap.String("typed_url", data.GetTypeUrl()),
+							zap.Any("config", data),
+							zap.Any("type", reflect.TypeOf(v)),
+						)
+						continue
+					}
+
+					// percentage
+					faultPlugin.Delay.Percentage = p.convertPercentage(fault.Delay.Percentage)
+				}
+
+				apisixRoute.Plugins["fault-injection"] = faultPlugin
+			} else {
+				p.logger.Warnw("unsupported HTTPFault version",
+					zap.String("typed_url", data.GetTypeUrl()),
+					zap.Any("config", data),
+				)
+			}
+			break
+		default:
+			p.logger.Warnw("unsupported http filter",
+				zap.String("name", filterName),
+				zap.Any("config", data),
+			)
+		}
+	}
+
+	return nil
+}
+
+func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.VirtualHost) ([]*apisix.Route, error) {
+	if routeName == "" {
+		routeName = "anon"
 	}
 
 	hostSet := util.StringSet{}
@@ -88,10 +196,16 @@ func (p *xdsProvisioner) translateVirtualHost(prefix string, vhost *routev3.Virt
 	// avoid unstable array for diff
 	hosts := hostSet.OrderedStrings()
 
+	var errors error = nil
 	var routes []*apisix.Route
 	for _, route := range vhost.GetRoutes() {
+		p.logger.Debugw(color.GreenString("process route"),
+			zap.Any("route", route),
+		)
+
+		match := route.GetMatch()
 		// TODO CaseSensitive field.
-		sensitive := route.GetMatch().CaseSensitive
+		sensitive := match.CaseSensitive
 		if sensitive != nil && !sensitive.GetValue() {
 			// Apache APISIX doesn't support case-insensitive URI match,
 			// so these routes should be neglected.
@@ -101,18 +215,26 @@ func (p *xdsProvisioner) translateVirtualHost(prefix string, vhost *routev3.Virt
 			continue
 		}
 
-		cluster, skip := p.getClusterName(route)
-		if skip {
+		cluster, err := p.getClusterName(route)
+		if err != nil {
+			p.logger.Warnw("failed to get cluster name, skipped",
+				zap.Error(err),
+				zap.Any("route", route),
+			)
 			continue
 		}
-		uri, skip := p.getURL(route)
-		if skip {
+		uri, err := p.getURL(route)
+		if err != nil {
+			p.logger.Warnw("failed to get url from path specifier, skipped",
+				zap.Error(err),
+				zap.Any("route", route),
+			)
 			continue
 		}
 
 		name := route.Name
 		if name == "" {
-			name = "<anon>"
+			name = "anon"
 		}
 		priority := _defaultRoutePriority
 		if len(hosts) == 0 {
@@ -124,38 +246,71 @@ func (p *xdsProvisioner) translateVirtualHost(prefix string, vhost *routev3.Virt
 			priority = 0
 		}
 
-		queryVars, skip := p.getParametersMatchVars(route)
-		if skip {
+		queryVars, err := p.getParametersMatchVars(route)
+		if err != nil {
+			p.logger.Warnw("failed to get parameter match variable, skipped",
+				zap.Error(err),
+				zap.Any("route", route),
+			)
 			continue
 		}
-		vars, skip := p.getHeadersMatchVars(route)
-		if skip {
+		vars, err := p.getHeadersMatchVars(route)
+		if err != nil {
+			p.logger.Warnw("failed to get header match variable, skipped",
+				zap.Error(err),
+				zap.Any("route", route),
+			)
 			continue
 		}
 		vars = append(vars, queryVars...)
-		name = fmt.Sprintf("%s#%s#%s", name, vhost.GetName(), prefix)
+		name = fmt.Sprintf("%s#%s#%s", name, vhost.GetName(), routeName)
 		name = strings.Replace(name, ".svc.cluster.local", "", -1) // avoid name too long
+
+		set := util.StringSet{}
+		for _, v := range vars {
+			set.Add(v.ToComparableString())
+		}
+		condStr := strings.Join(set.OrderedStrings(), "-")
+
+		// all matching conditions should be considered in name generation, since routes may have same name
+		matchConditions := fmt.Sprintf("%v-%v-%v", uri, sensitive, condStr)
+
 		r := &apisix.Route{
 			Name:       name,
 			Priority:   int32(priority),
 			Status:     1,
-			Id:         id.GenID(name),
+			Id:         id.GenID(name) + "_" + id.GenID(matchConditions),
 			Hosts:      hosts,
 			Uris:       []string{uri},
 			UpstreamId: id.GenID(cluster),
 			Vars:       vars,
+			Plugins:    map[string]interface{}{},
 			Desc:       "GENERATED_BY_AMESH: VIRTUAL_HOST: " + vhost.Name,
 		}
 
-		r = p.patchRoutePlugins(r)
+		//p.logger.Warnw("pre filter route",
+		//	zap.Any("route", route),
+		//	zap.Any("apisix_route", r),
+		//)
+		err = p.translateRouteFilters(route, r)
+		if err != nil {
+			errors = multierror.Append(err)
+			continue
+		}
+
+		//p.logger.Warnw("pre filter route",
+		//	zap.Any("route", route),
+		//	zap.Any("apisix_route", r),
+		//)
+		r = p.patchAmeshPlugins(r)
 
 		routes = append(routes, r)
 	}
-	return routes, nil
+	return routes, errors
 }
 
-func (p *xdsProvisioner) patchRoutePlugins(route *apisix.Route) *apisix.Route {
-	route.Plugins = map[string]interface{}{}
+func (p *xdsProvisioner) patchAmeshPlugins(route *apisix.Route) *apisix.Route {
+	//route.Plugins = map[string]interface{}{}
 	plugins := p.amesh.GetPlugins()
 
 	preReq := types.ApisixExtPluginConfig{}
@@ -187,43 +342,33 @@ func (p *xdsProvisioner) patchRoutePlugins(route *apisix.Route) *apisix.Route {
 	return route
 }
 
-func (p *xdsProvisioner) getClusterName(route *routev3.Route) (string, bool) {
+func (p *xdsProvisioner) getClusterName(route *routev3.Route) (string, error) {
 	action, ok := route.GetAction().(*routev3.Route_Route)
 	if !ok {
-		p.logger.Warnw("ignore route with unexpected action type",
-			zap.Any("route", route),
-			zap.Any("action", route.GetAction()),
-		)
-		return "", true
+		return "", fmt.Errorf("unsupported route action type %T", route.GetAction())
 	}
 	cluster, ok := action.Route.GetClusterSpecifier().(*routev3.RouteAction_Cluster)
 	if !ok {
-		p.logger.Warnw("ignore route with unexpected cluster specifier",
-			zap.Any("route", route),
-		)
-		return "", true
+		return "", fmt.Errorf("unsupported cluster specifier type %T", action.Route.GetClusterSpecifier())
 	}
-	return cluster.Cluster, false
+	return cluster.Cluster, nil
 }
 
-func (p *xdsProvisioner) getURL(route *routev3.Route) (string, bool) {
+func (p *xdsProvisioner) getURL(route *routev3.Route) (string, error) {
 	var uri string
-	switch route.GetMatch().GetPathSpecifier().(type) {
+	path := route.GetMatch().GetPathSpecifier()
+	switch path.(type) {
 	case *routev3.RouteMatch_Path:
-		uri = route.GetMatch().GetPathSpecifier().(*routev3.RouteMatch_Path).Path
+		uri = path.(*routev3.RouteMatch_Path).Path
 	case *routev3.RouteMatch_Prefix:
-		uri = route.GetMatch().GetPathSpecifier().(*routev3.RouteMatch_Prefix).Prefix + "*"
+		uri = path.(*routev3.RouteMatch_Prefix).Prefix + "*"
 	default:
-		p.logger.Warnw("ignore route with unexpected path specifier",
-			zap.Any("route", route),
-			zap.Any("type", route.GetMatch().GetPathSpecifier()),
-		)
-		return "", true
+		return "", fmt.Errorf("unsupported path specifier type %T", path)
 	}
-	return uri, false
+	return uri, nil
 }
 
-func (p *xdsProvisioner) getParametersMatchVars(route *routev3.Route) ([]*apisix.Var, bool) {
+func (p *xdsProvisioner) getParametersMatchVars(route *routev3.Route) ([]*apisix.Var, error) {
 	// See https://github.com/api7/lua-resty-expr
 	// for the translation details.
 	var vars []*apisix.Var
@@ -235,7 +380,10 @@ func (p *xdsProvisioner) getParametersMatchVars(route *routev3.Route) ([]*apisix
 			expr = apisix.Var{name, "!", "~~", "^$"}
 		case *routev3.QueryParameterMatcher_StringMatch:
 			matcher := param.GetQueryParameterMatchSpecifier().(*routev3.QueryParameterMatcher_StringMatch)
-			value := getStringMatchValue(matcher.StringMatch)
+			value, err := getStringMatchValue(matcher.StringMatch)
+			if err != nil {
+				return nil, err
+			}
 			op := "~~"
 			if matcher.StringMatch.IgnoreCase {
 				op = "~*"
@@ -244,10 +392,10 @@ func (p *xdsProvisioner) getParametersMatchVars(route *routev3.Route) ([]*apisix
 		}
 		vars = append(vars, &expr)
 	}
-	return vars, false
+	return vars, nil
 }
 
-func (p *xdsProvisioner) getHeadersMatchVars(route *routev3.Route) ([]*apisix.Var, bool) {
+func (p *xdsProvisioner) getHeadersMatchVars(route *routev3.Route) ([]*apisix.Var, error) {
 	// See https://github.com/api7/lua-resty-expr
 	// for the translation details.
 	var vars []*apisix.Var
@@ -269,26 +417,10 @@ func (p *xdsProvisioner) getHeadersMatchVars(route *routev3.Route) ([]*apisix.Va
 
 		switch v := header.HeaderMatchSpecifier.(type) {
 		case *routev3.HeaderMatcher_StringMatch:
-			// TODO support case sensitive options
-			//insensitive := v.StringMatch.IgnoreCase
-
-			switch m := v.StringMatch.MatchPattern.(type) {
-			case *matcherv3.StringMatcher_Exact:
-				value = "^" + m.Exact + "$"
-			case *matcherv3.StringMatcher_Prefix:
-				value = "^" + m.Prefix
-			case *matcherv3.StringMatcher_Suffix:
-				value = m.Suffix + "$"
-			case *matcherv3.StringMatcher_SafeRegex:
-				value = m.SafeRegex.Regex
-			case *matcherv3.StringMatcher_Contains:
-				value = m.Contains
-			default:
-				p.logger.Warnw("unsupported string matcher in header matcher",
-					zap.Any("matcher", m),
-					zap.Any("route", route),
-				)
-				return nil, true
+			var err error
+			value, err = getStringMatchValue(v.StringMatch)
+			if err != nil {
+				return nil, err
 			}
 		case *routev3.HeaderMatcher_ContainsMatch:
 			value = v.ContainsMatch
@@ -307,7 +439,7 @@ func (p *xdsProvisioner) getHeadersMatchVars(route *routev3.Route) ([]*apisix.Va
 				zap.Any("matcher", v),
 				zap.Any("route", route),
 			)
-			return nil, true
+			return nil, fmt.Errorf("unexpected header matcher type %T", v)
 		}
 
 		if header.InvertMatch {
@@ -317,25 +449,28 @@ func (p *xdsProvisioner) getHeadersMatchVars(route *routev3.Route) ([]*apisix.Va
 		}
 		vars = append(vars, &expr)
 	}
-	return vars, false
+	return vars, nil
 }
 
-func getStringMatchValue(matcher *matcherv3.StringMatcher) string {
+func getStringMatchValue(matcher *matcherv3.StringMatcher) (string, error) {
+	// TODO support case sensitive options
+	//insensitive := matcher.IgnoreCase
+
 	pattern := matcher.MatchPattern
 	switch pat := pattern.(type) {
 	case *matcherv3.StringMatcher_Exact:
-		return "^" + pat.Exact + "$"
+		return "^" + pat.Exact + "$", nil
 	case *matcherv3.StringMatcher_Contains:
-		return pat.Contains
+		return pat.Contains, nil
 	case *matcherv3.StringMatcher_Prefix:
-		return "^" + pat.Prefix
+		return "^" + pat.Prefix, nil
 	case *matcherv3.StringMatcher_Suffix:
-		return pat.Suffix + "$"
+		return pat.Suffix + "$", nil
 	case *matcherv3.StringMatcher_SafeRegex:
 		// TODO Regex Engine detection.
-		return pat.SafeRegex.Regex
+		return pat.SafeRegex.Regex, nil
 	default:
-		panic("unknown StringMatcher type")
+		return "", fmt.Errorf("unknown StringMatcher type %T", pattern)
 	}
 }
 
@@ -361,6 +496,7 @@ func (p *xdsProvisioner) GetRoutesFromListener(l *listenerv3.Listener) ([]string
 
 	for _, fc := range l.FilterChains {
 		for _, f := range fc.Filters {
+			// network filters
 			switch f.Name {
 			case xdswellknown.HTTPConnectionManager:
 				if f.GetTypedConfig().GetTypeUrl() == _httpConnectManagerV3 {
@@ -385,16 +521,10 @@ func (p *xdsProvisioner) GetRoutesFromListener(l *listenerv3.Listener) ([]string
 					}
 				} else {
 					p.logger.Warnw("unsupported HTTPConnectManager version",
-						zap.String("typed", f.GetTypedConfig().GetTypeUrl()),
+						zap.String("typed_url", f.GetTypedConfig().GetTypeUrl()),
 						zap.Any("config", f.GetTypedConfig()),
 					)
 				}
-				break
-			case xdswellknown.Fault:
-				p.logger.Warnw("fault filter is unsupported for now",
-					zap.String("name", f.Name),
-					zap.Any("config", f.GetTypedConfig()),
-				)
 				break
 			case xdswellknown.TCPProxy:
 				p.logger.Debugw("unsupported tcp proxy filter",
@@ -409,7 +539,7 @@ func (p *xdsProvisioner) GetRoutesFromListener(l *listenerv3.Listener) ([]string
 				)
 				break
 			default:
-				p.logger.Warnw("unsupported filter",
+				p.logger.Warnw("unsupported network filter",
 					zap.String("name", f.Name),
 					zap.Any("config", f.GetTypedConfig()),
 				)

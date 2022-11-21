@@ -255,7 +255,7 @@ func FCase(name string, f func()) {
 
 func SCase(name string, f func()) {
 	ginkgo.It(name, caseWrapper(name, func() {
-		ginkgo.Skip("Temporary Skip")
+		ginkgo.Skip("Temporary Skip: " + name)
 		f()
 	}), ginkgo.Offset(1))
 }
@@ -286,6 +286,13 @@ func AssertNil(err error, msg ...interface{}) {
 		//time.Sleep(time.Hour)
 	}
 	assert.Nil(ginkgo.GinkgoT(), err, msg...)
+}
+
+func DebugSleep(t time.Duration) {
+	debug := os.Getenv("DEBUG")
+	if strings.ToLower(debug) == "true" || debug == "1" {
+		time.Sleep(t)
+	}
 }
 
 func PtrOf[T any](v T) *T {

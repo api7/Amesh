@@ -13,15 +13,35 @@
 // limitations under the License.
 package apisix
 
+import "strings"
+
 // Valid Var array:
 // ["XXX", "==", "YYY"]
 // ["XXX", "in", ["A", "B", "C"]]
 // A Var should be string or string array
-type Var = []interface{}
+type Var []interface{}
+
+// ToComparableString converts Var to string
+// The function doesn't guarantee that there are no conflicts in any case.
+func (v *Var) ToComparableString() string {
+	s := ""
+
+	for _, val := range *v {
+		switch value := val.(type) {
+		case string:
+			// escape dot to avoid conflict
+			s += strings.Replace(value, ".", `..`, -1) + "."
+		case *Var:
+			s += value.ToComparableString() + "."
+		}
+	}
+
+	return s
+}
 
 // Timeout represents the timeout settings.
 // It's worth to note that the timeout is used to control the time duration
-// between two successive I/O operations. It doesn't contraint the whole I/O
+// between two successive I/O operations. It doesn't constraint the whole I/O
 // operation durations.
 type Timeout struct {
 	// connect controls the connect timeout in seconds.
