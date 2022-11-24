@@ -28,7 +28,9 @@ export AMESH_IPTABLES_IMAGE_TAG ?= dev
 export AMESH_SO_IMAGE ?= amesh-so
 export AMESH_SO_IMAGE_TAG ?= dev
 
-
+# vars for `make install`
+OPENRESTY_PREFIX ?= /usr/local/openresty
+INSTALL ?= install
 
 .PHONY: create-bin-dir
 create-bin-dir:
@@ -155,3 +157,7 @@ update-license:
 update-imports:
 	bash -c 'go install github.com/incu6us/goimports-reviser/v2@latest'
 	./scripts/update-imports.sh
+
+.PHONY install:
+install: build-amesh-so
+	$(INSTALL) -m 664 $(BINDIR)/libxds.so $(OPENRESTY_PREFIX)/
