@@ -155,7 +155,7 @@ func (g *Agent) Run(stop <-chan struct{}) error {
 			port = int(parsed)
 		}
 		http.HandleFunc("/status", func(writer http.ResponseWriter, request *http.Request) {
-			status, err := g.provisioner.Status()
+			status, err := g.provisioner.Status() // FIXME: Status Server should work when unable to connect to xds source
 			if err != nil {
 				writer.WriteHeader(http.StatusInternalServerError)
 				_, writeErr := writer.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))

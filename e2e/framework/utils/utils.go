@@ -58,7 +58,10 @@ func WaitExponentialBackoff(condFunc func() (bool, error)) error {
 		Factor:   1,
 		Steps:    60,
 	}
-	return wait.ExponentialBackoff(backoff, condFunc)
+	return wait.ExponentialBackoff(backoff, func() (done bool, err error) {
+		defer ginkgo.GinkgoRecover()
+		return condFunc()
+	})
 }
 
 func WaitForServiceReady(kubectlOpts *k8s.KubectlOptions, ns, name string) (string, error) {
@@ -279,7 +282,7 @@ func AssertNil(err error, msg ...interface{}) {
 	if err != nil {
 		errMsg := err.Error()
 		if len(msg) > 0 {
-			errMsg = fmt.Sprintf(msg[0].(string), msg[1:]...) + " failed: " + errMsg
+			errMsg = fmt.Sprintf(msg[0].(string), msg[1:]...) + ". Error: " + errMsg
 		}
 		log.SkipFramesOnce(1)
 		log.Errorf(errMsg)
@@ -289,8 +292,9 @@ func AssertNil(err error, msg ...interface{}) {
 }
 
 func DebugSleep(t time.Duration) {
-	debug := os.Getenv("DEBUG")
+	debug := os.Getenv("AMESH_E2E_DEBUG")
 	if strings.ToLower(debug) == "true" || debug == "1" {
+		log.Errorf("ERROR, please check logs")
 		time.Sleep(t)
 	}
 }

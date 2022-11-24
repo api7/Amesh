@@ -82,7 +82,7 @@ func (f *Framework) GetPodNamesByLabel(namespace string, labelSelector string) (
 
 // DeleteResourceFromString deletes a Kubernetes resource from the given manifest.
 func (f *Framework) DeleteResourceFromString(res, name string) error {
-	_, err := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "delete", res, name)
+	_, err := f.RunKubectlCommand("delete", res, name)
 	return err
 }
 
@@ -256,4 +256,9 @@ func (f *Framework) GetDeploymentLogs(ns, name string) string {
 	}
 	buf.WriteString(color.RedString("\n=== Deployment End ===\n"))
 	return buf.String()
+}
+
+func (f *Framework) RunKubectlCommand(args ...string) (string, error) {
+	log.Infof("Running command: kubectl -n %v %v", f.kubectlOpts.Namespace, strings.Join(args, " "))
+	return k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, args...)
 }
