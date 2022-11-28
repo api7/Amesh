@@ -83,7 +83,7 @@ build-apisix-image:
 		--build-arg LUAROCKS_SERVER=https://luarocks.cn .
 
 .PHONY: build-amesh-sidecar-image
-build-amesh-sidecar-image: build-amesh-so-image
+build-amesh-sidecar-image:
 	docker pull $(PREBUILT_AMESH_APISIX_IMAGE)
 	docker tag $(PREBUILT_AMESH_APISIX_IMAGE) amesh-apisix:dev
 	docker build --build-arg ENABLE_PROXY=$(ENABLE_PROXY) \

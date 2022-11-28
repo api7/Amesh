@@ -104,6 +104,7 @@ func (route *Route) Copy() *Route {
 		r.Hosts = append(r.Hosts, val)
 	}
 	for k, v := range route.Plugins {
+		// TODO: copy plugins
 		r.Plugins[k] = v
 	}
 	for k, v := range route.Labels {

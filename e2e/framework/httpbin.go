@@ -19,8 +19,6 @@ import (
 	"time"
 
 	"github.com/api7/gopkg/pkg/log"
-	"github.com/gruntwork-io/terratest/modules/k8s"
-	"github.com/onsi/ginkgo/v2"
 
 	"github.com/api7/amesh/e2e/framework/utils"
 )
@@ -86,7 +84,7 @@ func (f *Framework) newHttpBin(name string, inMesh bool) {
 	utils.AssertNil(err, "render httpbin %s template", name)
 
 	log.Infof("creating httpbin %s", name)
-	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
+	err = f.ApplyResourceFromString(artifact)
 	utils.AssertNil(err, "apply httpbin %s", name)
 }
 

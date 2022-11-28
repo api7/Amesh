@@ -66,7 +66,7 @@ func (f *Framework) createCurl(name string, inMesh bool) string {
 		InMesh:       inMesh,
 	})
 	utils.AssertNil(err, "render curl template for %s", name)
-	err = k8s.KubectlApplyFromStringE(ginkgo.GinkgoT(), f.kubectlOpts, artifact)
+	err = f.ApplyResourceFromString(artifact)
 	if err != nil {
 		log.Errorf("failed to apply curl pod %s: %s", name, err.Error())
 	}

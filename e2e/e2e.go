@@ -21,6 +21,7 @@ import (
 
 	_ "github.com/api7/amesh/e2e/test/amesh"
 	_ "github.com/api7/amesh/e2e/test/base"
+	_ "github.com/api7/amesh/e2e/test/istio"
 )
 
 func runE2E() {

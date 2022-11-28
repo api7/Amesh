@@ -863,7 +863,7 @@ func (p *xdsProvisioner) updateRoutesPluginManifest() (*util.Manifest, *util.Man
 	var newRoutes []*apisix.Route
 	for _, oldRoute := range oldManifest.Routes {
 		route := oldRoute.Copy()
-		route = p.patchRoutePlugins(route)
+		route = p.patchAmeshPlugins(route)
 		newRoutes = append(newRoutes, route)
 	}
 	p.routes = newRoutes

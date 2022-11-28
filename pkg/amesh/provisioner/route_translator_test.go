@@ -16,20 +16,32 @@ package provisioner
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/api7/gopkg/pkg/id"
 	"github.com/api7/gopkg/pkg/log"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
+	faultv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/fault/v3"
 	matcherv3 "github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3"
+	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
+	xdswellknown "github.com/envoyproxy/go-control-plane/pkg/wellknown"
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/api7/amesh/pkg/apisix"
 	"github.com/api7/amesh/pkg/apisix/utils"
 )
 
 func TestGetStringMatchValue(t *testing.T) {
+	getStringMatchValue := func(matcher *matcherv3.StringMatcher) string {
+		val, _ := getStringMatchValue(matcher)
+		return val
+	}
+
 	matcher := &matcherv3.StringMatcher{
 		MatchPattern: &matcherv3.StringMatcher_Exact{
 			Exact: "Hangzhou",
@@ -112,8 +124,8 @@ func TestGetHeadersMatchVars(t *testing.T) {
 			},
 		},
 	}
-	vars, skip := a.getHeadersMatchVars(route)
-	assert.Equal(t, skip, false)
+	vars, err := a.getHeadersMatchVars(route)
+	assert.Equal(t, err, nil)
 	assert.Len(t, vars, len(route.Match.Headers))
 	assert.Equal(t, vars[0], &apisix.Var{"request_method", "~~", "POST"})
 	assert.Equal(t, vars[1], &apisix.Var{"http_host", "~~", "^apisix.apache.org$"})
@@ -161,8 +173,8 @@ func TestGetParametersMatchVars(t *testing.T) {
 		},
 	}
 
-	vars, skip := a.getParametersMatchVars(route)
-	assert.Equal(t, skip, false)
+	vars, err := a.getParametersMatchVars(route)
+	assert.Equal(t, err, nil)
 	assert.Len(t, vars, 3)
 	assert.Equal(t, vars[0], &apisix.Var{"arg_man", "!", "~~", "^$"})
 	assert.Equal(t, vars[1], &apisix.Var{"arg_id", "~~", "^123456$"})
@@ -180,8 +192,8 @@ func TestGetURL(t *testing.T) {
 			},
 		},
 	}
-	uri, skip := a.getURL(route)
-	assert.Equal(t, skip, false)
+	uri, err := a.getURL(route)
+	assert.Nil(t, err)
 	assert.Equal(t, uri, "/foo/baz*")
 
 	route = &routev3.Route{
@@ -191,8 +203,8 @@ func TestGetURL(t *testing.T) {
 			},
 		},
 	}
-	uri, skip = a.getURL(route)
-	assert.Equal(t, skip, false)
+	uri, err = a.getURL(route)
+	assert.Nil(t, err)
 	assert.Equal(t, uri, "/foo/baz")
 
 	route = &routev3.Route{
@@ -204,8 +216,8 @@ func TestGetURL(t *testing.T) {
 			},
 		},
 	}
-	_, skip = a.getURL(route)
-	assert.Equal(t, skip, true)
+	_, err = a.getURL(route)
+	assert.NotNil(t, err)
 }
 
 func TestGetClusterName(t *testing.T) {
@@ -221,15 +233,15 @@ func TestGetClusterName(t *testing.T) {
 			},
 		},
 	}
-	clusterName, skip := a.getClusterName(route)
-	assert.Equal(t, skip, false)
+	clusterName, err := a.getClusterName(route)
+	assert.Nil(t, err)
 	assert.Equal(t, clusterName, "kubernetes.default.svc.cluster.local")
 
 	route = &routev3.Route{
 		Action: &routev3.Route_Redirect{},
 	}
-	_, skip = a.getClusterName(route)
-	assert.Equal(t, skip, true)
+	_, err = a.getClusterName(route)
+	assert.NotNil(t, err)
 
 	route = &routev3.Route{
 		Action: &routev3.Route_Route{
@@ -238,13 +250,26 @@ func TestGetClusterName(t *testing.T) {
 			},
 		},
 	}
-	_, skip = a.getClusterName(route)
-	assert.Equal(t, skip, true)
+	_, err = a.getClusterName(route)
+	assert.NotNil(t, err)
+}
+
+func toAnyPb(msg proto.Message) *anypb.Any {
+	var a anypb.Any
+	err := anypb.MarshalFrom(&a, msg, proto.MarshalOptions{})
+	if err != nil {
+		panic(err)
+	}
+	return &a
 }
 
 func TestTranslateVirtualHost(t *testing.T) {
 	a := &xdsProvisioner{
 		logger: log.DefaultLogger,
+
+		amesh: &ameshProvisioner{
+			config: nil,
+		},
 	}
 	vhost := &routev3.VirtualHost{
 		Name: "test",
@@ -284,9 +309,13 @@ func TestTranslateVirtualHost(t *testing.T) {
 				Match: &routev3.RouteMatch{
 					Headers: []*routev3.HeaderMatcher{
 						{
-							Name: ":method",
-							HeaderMatchSpecifier: &routev3.HeaderMatcher_ContainsMatch{
-								ContainsMatch: "POST",
+							Name: "User",
+							HeaderMatchSpecifier: &routev3.HeaderMatcher_StringMatch{
+								StringMatch: &matcherv3.StringMatcher{
+									MatchPattern: &matcherv3.StringMatcher_Contains{
+										Contains: "abort",
+									},
+								},
 							},
 						},
 					},
@@ -296,6 +325,7 @@ func TestTranslateVirtualHost(t *testing.T) {
 				},
 				Action: &routev3.Route_Route{
 					Route: &routev3.RouteAction{
+						// No cluster name, skipped
 						ClusterSpecifier: &routev3.RouteAction_ClusterHeader{},
 					},
 				},
@@ -313,22 +343,134 @@ func TestTranslateVirtualHost(t *testing.T) {
 	routes, err := a.translateVirtualHost("test", vhost)
 	assert.Nil(t, err)
 	assert.Len(t, routes, 1)
-	assert.Equal(t, routes[0].Name, "route1#test#test")
-	assert.Equal(t, routes[0].Status, apisix.RouteEnable)
-	assert.Equal(t, routes[0].Id, id.GenID(routes[0].Name))
+	assert.Equal(t, "route1#test#test", routes[0].Name)
+	assert.Equal(t, apisix.RouteEnable, routes[0].Status)
+	assert.True(t, strings.Contains(routes[0].Id, id.GenID(routes[0].Name)))
 
 	sort.Strings(routes[0].Hosts)
-	assert.Equal(t, routes[0].Hosts, []string{
+	assert.Equal(t, []string{
 		"*.apache.org",
 		"apisix.apache.org",
-	})
-	assert.Equal(t, routes[0].Uris, []string{
+	}, routes[0].Hosts)
+	assert.Equal(t, []string{
 		"/foo/baz*",
-	})
-	assert.Equal(t, routes[0].UpstreamId, id.GenID("kubernetes.default.svc.cluster.local"))
-	assert.Equal(t, routes[0].Vars, []*apisix.Var{
+	}, routes[0].Uris)
+	assert.Equal(t, id.GenID("kubernetes.default.svc.cluster.local"), routes[0].UpstreamId)
+	assert.Equal(t, []*apisix.Var{
 		{"request_method", "~~", "POST"},
-	})
+	}, routes[0].Vars)
+}
+
+func TestTranslateVirtualHostWithFilter(t *testing.T) {
+	a := &xdsProvisioner{
+		logger: log.DefaultLogger,
+
+		amesh: &ameshProvisioner{
+			config: nil,
+		},
+	}
+	vhost := &routev3.VirtualHost{
+		Name: "test",
+		Domains: []string{
+			"apisix.apache.org",
+			"*.apache.org",
+		},
+		Routes: []*routev3.Route{
+			{
+				Name: "route",
+				Match: &routev3.RouteMatch{
+					Headers: []*routev3.HeaderMatcher{
+						{
+							Name: "User",
+							HeaderMatchSpecifier: &routev3.HeaderMatcher_StringMatch{
+								StringMatch: &matcherv3.StringMatcher{
+									MatchPattern: &matcherv3.StringMatcher_Contains{
+										Contains: "abort",
+									},
+								},
+							},
+						},
+					},
+					PathSpecifier: &routev3.RouteMatch_Path{
+						Path: "/foo/baz",
+					},
+				},
+				Action: &routev3.Route_Route{
+					Route: &routev3.RouteAction{
+						ClusterSpecifier: &routev3.RouteAction_Cluster{
+							Cluster: "kubernetes.default.svc.cluster.local",
+						},
+					},
+				},
+			},
+			{
+				Name: "route", // Same name, but has different matching conditions
+				Match: &routev3.RouteMatch{
+					PathSpecifier: &routev3.RouteMatch_Path{
+						Path: "/foo/baz",
+					},
+				},
+				Action: &routev3.Route_Route{
+					Route: &routev3.RouteAction{
+						ClusterSpecifier: &routev3.RouteAction_Cluster{
+							Cluster: "kubernetes.default.svc.cluster.local",
+						},
+					},
+				},
+				TypedPerFilterConfig: map[string]*any.Any{
+					xdswellknown.Fault: toAnyPb(&faultv3.HTTPFault{
+						Abort: &faultv3.FaultAbort{
+							ErrorType: &faultv3.FaultAbort_HttpStatus{
+								HttpStatus: 555,
+							},
+							Percentage: &typev3.FractionalPercent{
+								Numerator:   100,
+								Denominator: 1,
+							},
+						},
+					}),
+				},
+			},
+		},
+	}
+	routes, err := a.translateVirtualHost("test", vhost)
+	assert.Nil(t, err)
+	assert.Len(t, routes, 2)
+	assert.Equal(t, "route#test#test", routes[0].Name)
+	assert.Equal(t, apisix.RouteEnable, routes[0].Status)
+
+	assert.True(t, strings.Contains(routes[0].Id, id.GenID(routes[0].Name)))
+	assert.True(t, strings.Contains(routes[1].Id, id.GenID(routes[0].Name)))
+	assert.True(t, routes[0].Id != routes[1].Id)
+
+	sort.Strings(routes[0].Hosts)
+	assert.Equal(t, []string{
+		"*.apache.org",
+		"apisix.apache.org",
+	}, routes[0].Hosts)
+	assert.Equal(t, []string{
+		"/foo/baz",
+	}, routes[0].Uris)
+	assert.Equal(t, id.GenID("kubernetes.default.svc.cluster.local"), routes[0].UpstreamId)
+	assert.Equal(t, []*apisix.Var{
+		{"http_user", "~~", "abort"},
+	}, routes[0].Vars)
+	assert.Equal(t, 0, len(routes[1].Vars))
+
+	assert.Equal(t, 0, len(routes[0].Plugins))
+	assert.Equal(t, 1, len(routes[1].Plugins))
+	assert.NotNil(t, routes[1].Plugins["fault-injection"].(*apisix.FaultInjection))
+	assert.NotNil(t, routes[1].Plugins["fault-injection"].(*apisix.FaultInjection).Abort)
+	assert.Equal(t, uint32(100), routes[1].Plugins["fault-injection"].(*apisix.FaultInjection).Abort.Percentage)
+	assert.Equal(t, uint32(555), routes[1].Plugins["fault-injection"].(*apisix.FaultInjection).Abort.HttpStatus)
+
+	routes[0].Id = ""
+	routes[1].Id = ""
+	routes[0].Plugins = nil
+	routes[1].Plugins = nil
+	routes[0].Vars = nil
+	routes[1].Vars = nil
+	assert.Equal(t, routes[0], routes[1])
 }
 
 func TestPatchRoutesWithOriginalDestination(t *testing.T) {
@@ -352,6 +494,10 @@ func TestPatchRoutesWithOriginalDestination(t *testing.T) {
 func TestUnstableHostsRouteDiff(t *testing.T) {
 	a := &xdsProvisioner{
 		logger: log.DefaultLogger,
+
+		amesh: &ameshProvisioner{
+			config: nil,
+		},
 	}
 	vhost1 := &routev3.VirtualHost{
 		Name: "test",
