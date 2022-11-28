@@ -136,7 +136,7 @@ func (r *AmeshPluginConfigReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			// Request object not found, could have been deleted after reconcile request.
 			// Return and don't requeue
 
-			r.Log.Error(err, "config plugin deleted", "key", key)
+			r.Log.Info("config plugin deleted", "key", key)
 			r.pluginsCacheLock.Lock()
 			delete(r.pluginsCache, key)
 			r.pluginsCacheLock.Unlock()

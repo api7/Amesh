@@ -125,6 +125,31 @@ func NewAgent(ctx context.Context, src, ameshGrpc string, dataZone, versionZone 
 func (g *Agent) Stop() {
 }
 
+func (g *Agent) internalDataHandler(dataType string) func(writer http.ResponseWriter, request *http.Request) {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		data, err := g.provisioner.GetData(dataType)
+		if err != nil {
+			writer.WriteHeader(http.StatusInternalServerError)
+			_, writeErr := writer.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
+			if writeErr != nil {
+				g.logger.Fatalw(fmt.Sprintf("failed to write %v error", dataType),
+					zap.Error(writeErr),
+					zap.NamedError("status_error", err),
+				)
+			}
+			return
+		}
+		writer.WriteHeader(http.StatusOK)
+		_, err = writer.Write([]byte(data))
+		if err != nil {
+			g.logger.Fatalw("failed to write "+dataType,
+				zap.Error(err),
+			)
+		}
+		return
+	}
+}
+
 func (g *Agent) Run(stop <-chan struct{}) error {
 	g.logger.Infow("sidecar started")
 	defer g.logger.Info("sidecar exited")
@@ -154,72 +179,13 @@ func (g *Agent) Run(stop <-chan struct{}) error {
 		} else {
 			port = int(parsed)
 		}
-		http.HandleFunc("/status", func(writer http.ResponseWriter, request *http.Request) {
-			status, err := g.provisioner.Status() // FIXME: Status Server should work when unable to connect to xds source
-			if err != nil {
-				writer.WriteHeader(http.StatusInternalServerError)
-				_, writeErr := writer.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
-				if writeErr != nil {
-					g.logger.Fatalw("failed to write /status error",
-						zap.Error(writeErr),
-						zap.NamedError("status_error", err),
-					)
-				}
-				return
-			}
-			writer.WriteHeader(http.StatusOK)
-			_, err = writer.Write([]byte(status))
-			if err != nil {
-				g.logger.Fatalw("failed to write status",
-					zap.Error(err),
-				)
-			}
-			return
-		})
-		http.HandleFunc("/routes", func(writer http.ResponseWriter, request *http.Request) {
-			routes, err := g.provisioner.GetData("routes")
-			if err != nil {
-				writer.WriteHeader(http.StatusInternalServerError)
-				_, writeErr := writer.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
-				if writeErr != nil {
-					g.logger.Fatalw("failed to write /routes error",
-						zap.Error(writeErr),
-						zap.NamedError("routes_error", err),
-					)
-				}
-				return
-			}
-			writer.WriteHeader(http.StatusOK)
-			_, err = writer.Write([]byte(routes))
-			if err != nil {
-				g.logger.Fatalw("failed to write routes",
-					zap.Error(err),
-				)
-			}
-			return
-		})
-		http.HandleFunc("/upstreams", func(writer http.ResponseWriter, request *http.Request) {
-			upstreams, err := g.provisioner.GetData("upstreams")
-			if err != nil {
-				writer.WriteHeader(http.StatusInternalServerError)
-				_, writeErr := writer.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
-				if writeErr != nil {
-					g.logger.Fatalw("failed to write /upstreams error",
-						zap.Error(writeErr),
-						zap.NamedError("routes_error", err),
-					)
-				}
-				return
-			}
-			writer.WriteHeader(http.StatusOK)
-			_, err = writer.Write([]byte(upstreams))
-			if err != nil {
-				g.logger.Fatalw("failed to write upstreams",
-					zap.Error(err),
-				)
-			}
-			return
-		})
+
+		// TODO: Add test to verify status server still work when unable to connect to xds source/amesh source
+		http.HandleFunc("/status", g.internalDataHandler("status"))
+		http.HandleFunc("/routes", g.internalDataHandler("routes"))
+		http.HandleFunc("/upstreams", g.internalDataHandler("upstreams"))
+		http.HandleFunc("/plugins", g.internalDataHandler("plugins"))
+
 		err = http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
 		if err != nil {
 			g.logger.Fatalw("failed to run status server",

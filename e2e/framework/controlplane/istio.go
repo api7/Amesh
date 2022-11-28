@@ -110,7 +110,7 @@ func (cp *istio) initCmd() {
 		"--set", "global.defaultResources.requests.cpu=1000m",
 		opts.ChartsPath,
 	)
-	deleteDiscovery := exec.Command(_helm, "uninstall", "istio-discovery", "--namespace", opts.Namespace, "--kubeconfig", kc)
+	deleteDiscovery := exec.Command(_helm, "uninstall", "amesh", "--namespace", opts.Namespace, "--kubeconfig", kc)
 
 	baseStderr := bytes.NewBuffer(nil)
 	discoveryStderr := bytes.NewBuffer(nil)

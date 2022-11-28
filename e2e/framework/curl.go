@@ -19,10 +19,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/api7/gopkg/pkg/log"
+
 	"github.com/api7/amesh/e2e/framework/utils"
 	"github.com/api7/amesh/pkg/amesh/provisioner"
 	"github.com/api7/amesh/pkg/apisix"
-	"github.com/api7/gopkg/pkg/log"
 )
 
 const (

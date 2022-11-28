@@ -45,7 +45,7 @@ type ameshProvisioner struct {
 	logger *log.Logger
 
 	configLock     sync.RWMutex
-	config         []*types.ApisixPlugin
+	config         map[string]*types.ApisixPlugin
 	configRevision map[string]string
 
 	evChan  chan struct{}
@@ -76,10 +76,12 @@ func NewAmeshProvisioner(src, logLevel, logOutput string) (*ameshProvisioner, er
 	}
 
 	return &ameshProvisioner{
-		src:            src,
-		namespace:      namespace,
-		name:           name,
-		logger:         logger,
+		src:       src,
+		namespace: namespace,
+		name:      name,
+		logger:    logger,
+
+		config:         map[string]*types.ApisixPlugin{},
 		configRevision: map[string]string{},
 
 		evChan:  make(chan struct{}),
@@ -215,21 +217,21 @@ func (p *ameshProvisioner) updatePlugins(resp *ameshapi.PluginsResponse) {
 		return
 	}
 
-	var plugins []*types.ApisixPlugin
 	p.configLock.Lock()
 	defer p.configLock.Unlock()
 
 	revisionMap := p.configRevision
 	p.configRevision = map[string]string{}
-	for _, plugin := range resp.Plugins {
-		if revision, ok := revisionMap[plugin.Name]; ok && plugin.Version <= revision {
+
+	plugins := map[string]*types.ApisixPlugin{}
+	for _, pluginConfig := range resp.Plugins {
+		if revision, ok := revisionMap[pluginConfig.Name]; ok && pluginConfig.Version <= revision {
 			continue
 		}
-		p.configRevision[plugin.Name] = plugin.Version
+		p.configRevision[pluginConfig.Name] = pluginConfig.Version
 
-		var apisixPlugins []*types.ApisixPlugin
 		pluginValues := map[string]map[string]interface{}{}
-		for _, plugin := range plugin.Plugins {
+		for _, plugin := range pluginConfig.Plugins {
 			var anyValue map[string]interface{}
 			err := json.Unmarshal([]byte(plugin.Config), &anyValue)
 			if err != nil {
@@ -239,22 +241,23 @@ func (p *ameshProvisioner) updatePlugins(resp *ameshapi.PluginsResponse) {
 				)
 				continue
 			}
-			apisixPlugins = append(apisixPlugins, &types.ApisixPlugin{
+			apisixPlugin := &types.ApisixPlugin{
 				Type:   plugin.Type,
 				Name:   plugin.Name,
 				Config: anyValue,
-			})
+			}
 			pluginValues[plugin.Name] = anyValue
+			plugins[plugin.Name] = apisixPlugin
 		}
 
-		plugins = append(plugins, apisixPlugins...)
+		// TODO: Do some priority stuff
 	}
 	p.config = plugins
 
 	p.evChan <- struct{}{}
 }
 
-func (p *ameshProvisioner) GetPlugins() []*types.ApisixPlugin {
+func (p *ameshProvisioner) GetPlugins() map[string]*types.ApisixPlugin {
 	p.configLock.RLock()
 	defer p.configLock.RUnlock()
 	return p.config

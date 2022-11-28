@@ -161,18 +161,16 @@ func NewXDSProvisioner(cfg *Config) (types.Provisioner, error) {
 	return p, nil
 }
 
-func (p *xdsProvisioner) Status() (string, error) {
-	str, err := json.Marshal(&XdsProvisionerStatus{
-		XdsConnected:          p.connected,
-		XdsProvisionerReady:   p.ready,
-		AmeshConnected:        p.amesh.connected,
-		AmeshProvisionerReady: p.amesh.ready,
-	})
-	return string(str), err
-}
-
 func (p *xdsProvisioner) GetData(dataType string) (string, error) {
 	switch dataType {
+	case "status":
+		str, err := json.MarshalIndent(&XdsProvisionerStatus{
+			XdsConnected:          p.connected,
+			XdsProvisionerReady:   p.ready,
+			AmeshConnected:        p.amesh.connected,
+			AmeshProvisionerReady: p.amesh.ready,
+		}, "", "  ")
+		return string(str), err
 	case "routes":
 		routes := map[string]*apisix.Route{}
 		p.routesLock.RLock()
@@ -199,6 +197,14 @@ func (p *xdsProvisioner) GetData(dataType string) (string, error) {
 			return "", err
 		}
 		return string(data), nil
+	case "plugins":
+		plugins := p.amesh.GetPlugins()
+
+		dataStr, err := json.MarshalIndent(plugins, "", "  ")
+		if err != nil {
+			return "", err
+		}
+		return string(dataStr), nil
 	}
 	return fmt.Sprintf(`{"error": "unknown data type %s"}`, dataType), nil
 }
@@ -303,7 +309,7 @@ func (p *xdsProvisioner) run(stop <-chan struct{}, client discoveryv3.Aggregated
 			case <-stop:
 				return
 			case <-p.amesh.EventsChannel():
-				p.logger.Info("amesh events received, updating routes")
+				p.logger.Info("amesh-controller events received, updating routes")
 				p.UpdateRoutesPlugin()
 			}
 		}
@@ -313,6 +319,7 @@ func (p *xdsProvisioner) run(stop <-chan struct{}, client discoveryv3.Aggregated
 	go p.translateLoop(stop)
 	go p.firstSend()
 
+	// TODO: make periodic sync interval configurable
 	go func() {
 		timer := time.NewTimer(time.Second * 10)
 		for {
@@ -846,7 +853,9 @@ func (p *xdsProvisioner) UpdateRoutesPlugin() {
 	newManifest, oldManifest := p.updateRoutesPluginManifest()
 	events := p.generateIncrementalEvents(newManifest, oldManifest)
 	go func() {
-		p.logger.Info("updating routes plugin")
+		p.logger.Info("updating routes plugin",
+			zap.Any("events", events),
+		)
 		p.evChan <- events
 	}()
 }
