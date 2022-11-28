@@ -288,6 +288,8 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 			Desc:       "GENERATED_BY_AMESH: VIRTUAL_HOST: " + vhost.Name,
 		}
 
+		r = p.patchAmeshPlugins(r)
+
 		//p.logger.Warnw("pre filter route",
 		//	zap.Any("route", route),
 		//	zap.Any("apisix_route", r),
@@ -297,12 +299,6 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 			errors = multierror.Append(err)
 			continue
 		}
-
-		//p.logger.Warnw("pre filter route",
-		//	zap.Any("route", route),
-		//	zap.Any("apisix_route", r),
-		//)
-		r = p.patchAmeshPlugins(r)
 
 		routes = append(routes, r)
 	}
