@@ -20,8 +20,6 @@ import (
 	"time"
 
 	"github.com/api7/gopkg/pkg/log"
-	"github.com/gruntwork-io/terratest/modules/k8s"
-	"github.com/onsi/ginkgo/v2"
 
 	"github.com/api7/amesh/e2e/framework/utils"
 	"github.com/api7/amesh/pkg/amesh/provisioner"
@@ -108,7 +106,7 @@ func (f *Framework) CurlInPod(name string, args ...string) string {
 
 	cmd := []string{"exec", name, "-c", "istio-proxy", "--", "curl", "-s", "-i"}
 	cmd = append(cmd, args...)
-	output, err := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, cmd...)
+	output, err := f.RunKubectlCommand(cmd...)
 
 	if err != nil {
 		log.Errorf("curl failed: %s", err.Error())
@@ -120,7 +118,7 @@ func (f *Framework) CurlInPod(name string, args ...string) string {
 
 func (f *Framework) queryStatusServer(podName, api string) string {
 	cmd := []string{"exec", podName, "-c", "istio-proxy", "--", "curl", "-s", "localhost:9999/" + api}
-	output, err := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, cmd...)
+	output, err := f.RunKubectlCommand(cmd...)
 
 	log.SkipFramesOnce(1)
 	log.Infof("Executing: kubectl " + strings.Join(cmd, " "))
@@ -137,7 +135,7 @@ func (f *Framework) GetSidecarStatus(podName string) *provisioner.XdsProvisioner
 
 	var status provisioner.XdsProvisionerStatus
 	err := json.Unmarshal([]byte(output), &status)
-	utils.AssertNil(err, "failed to unmarshal sidecar %s status", podName)
+	utils.AssertNil(err, "failed to unmarshal sidecar %s status. Raw: %v", podName, output)
 
 	return &status
 }
@@ -147,7 +145,7 @@ func (f *Framework) GetSidecarRoutes(podName string) map[string]*apisix.Route {
 
 	var routes map[string]*apisix.Route
 	err := json.Unmarshal([]byte(output), &routes)
-	utils.AssertNil(err, "failed to unmarshal sidecar %s routes", podName)
+	utils.AssertNil(err, "failed to unmarshal sidecar %s routes. Raw: %v", podName, output)
 
 	return routes
 }
@@ -157,7 +155,7 @@ func (f *Framework) GetSidecarUpstreams(podName string) map[string]*apisix.Upstr
 
 	var upstreams map[string]*apisix.Upstream
 	err := json.Unmarshal([]byte(output), &upstreams)
-	utils.AssertNil(err, "failed to unmarshal sidecar %s upstreams", podName)
+	utils.AssertNil(err, "failed to unmarshal sidecar %s upstreams. Raw: %v", podName, output)
 
 	return upstreams
 }

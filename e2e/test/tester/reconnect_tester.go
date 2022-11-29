@@ -55,7 +55,8 @@ func (t *ReconnectTester) ValidateStatusAmeshIsOK() {
 	condFunc := func() (bool, error) {
 		return t.f.GetSidecarStatus(t.curlPod).AmeshConnected, nil
 	}
-	_ = utils.WaitExponentialBackoff(condFunc) // ignore timeout error
+	err := utils.WaitExponentialBackoff(condFunc) // ignore timeout error
+	assert.Nil(ginkgo.GinkgoT(), err, "get amesh status")
 
 	assert.Equal(ginkgo.GinkgoT(), true, t.f.GetSidecarStatus(t.curlPod).AmeshConnected, "amesh should connected")
 	assert.Equal(ginkgo.GinkgoT(), true, t.f.GetSidecarStatus(t.curlPod).AmeshProvisionerReady, "amesh provisioner should ready")

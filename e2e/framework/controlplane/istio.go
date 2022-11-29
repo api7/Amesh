@@ -33,12 +33,9 @@ var (
 )
 
 type istio struct {
-	base                   *exec.Cmd
 	discovery              *exec.Cmd
-	cleanupBase            *exec.Cmd
 	cleanupDiscovery       *exec.Cmd
 	baseStderr             *bytes.Buffer
-	cleanupBaseStderr      *bytes.Buffer
 	discoveryStderr        *bytes.Buffer
 	cleanupDiscoveryStderr *bytes.Buffer
 
@@ -61,10 +58,8 @@ type IstioOptions struct {
 	SidecarImage string
 	// Namespace is the target namespace to install istio.
 	Namespace string
-	// ChartsPath is a directory that contains charts for Istio.
-	// The first element should be the chart for istio-base and
-	// the second is the istio-discovery.
-	ChartsPath []string
+	// ChartsPath is a directory that contains charts for Amesh.
+	ChartsPath string
 
 	KubectlOpts *k8s.KubectlOptions
 }
@@ -105,13 +100,7 @@ func (cp *istio) initCmd() {
 	kc := opts.KubeConfig
 	image := opts.IstioImage
 
-	base := exec.Command(_helm,
-		"install", "istio-base", "--namespace", opts.Namespace, "--kubeconfig", kc,
-		"--set", "global.istioNamespace="+opts.Namespace,
-
-		opts.ChartsPath[0])
-	deleteBase := exec.Command(_helm, "uninstall", "istio-base", "--namespace", opts.Namespace, "--kubeconfig", kc)
-	discovery := exec.Command(_helm, "install", "istio-discovery", "--namespace", opts.Namespace, "--kubeconfig", kc,
+	discovery := exec.Command(_helm, "install", "amesh", "--namespace", opts.Namespace, "--kubeconfig", kc,
 		"--set", "pilot.image="+image,
 		"--set", "global.imagePullPolicy=IfNotPresent",
 		"--set", "global.proxy.privileged=true",
@@ -119,26 +108,20 @@ func (cp *istio) initCmd() {
 		"--set", "global.proxy.image="+opts.SidecarImage,
 		"--set", "global.istioNamespace="+opts.Namespace,
 		"--set", "global.defaultResources.requests.cpu=1000m",
-		opts.ChartsPath[1],
+		opts.ChartsPath,
 	)
-	deleteDiscovery := exec.Command(_helm, "uninstall", "istio-discovery", "--namespace", opts.Namespace, "--kubeconfig", kc)
+	deleteDiscovery := exec.Command(_helm, "uninstall", "amesh", "--namespace", opts.Namespace, "--kubeconfig", kc)
 
 	baseStderr := bytes.NewBuffer(nil)
-	cleanupBaseStderr := bytes.NewBuffer(nil)
 	discoveryStderr := bytes.NewBuffer(nil)
 	cleanupDiscoveryStderr := bytes.NewBuffer(nil)
 
-	base.Stderr = baseStderr
-	deleteBase.Stderr = cleanupBaseStderr
 	discovery.Stderr = discoveryStderr
 	deleteDiscovery.Stderr = cleanupDiscoveryStderr
 
-	cp.base = base
 	cp.discovery = discovery
-	cp.cleanupBase = deleteBase
 	cp.cleanupDiscovery = deleteDiscovery
 	cp.baseStderr = baseStderr
-	cp.cleanupBaseStderr = cleanupBaseStderr
 	cp.discoveryStderr = discoveryStderr
 	cp.cleanupDiscoveryStderr = cleanupDiscoveryStderr
 }
@@ -146,16 +129,7 @@ func (cp *istio) initCmd() {
 func (cp *istio) Deploy() error {
 	cp.initCmd()
 
-	err := cp.base.Run()
-	if err != nil {
-		log.Errorf("failed to run istio-base install command")
-		log.Errorf("command: %s", cp.base.String())
-		log.Errorf("err: %s", err.Error())
-		log.Errorf("stderr: %s", cp.baseStderr.String())
-		return err
-	}
-
-	err = cp.discovery.Run()
+	err := cp.discovery.Run()
 	if err != nil {
 		log.Errorf("failed to run istio-discovery install command")
 		log.Errorf("command: %s", cp.discovery.String())
@@ -183,14 +157,6 @@ func (cp *istio) Uninstall() error {
 		log.Errorw("failed to uninstall istio-discovery",
 			zap.Error(err),
 			zap.String("stderr", cp.cleanupDiscoveryStderr.String()),
-		)
-		return err
-	}
-	err = cp.cleanupBase.Run()
-	if err != nil {
-		log.Errorw("failed to uninstall istio-base",
-			zap.Error(err),
-			zap.String("stderr", cp.cleanupBaseStderr.String()),
 		)
 		return err
 	}

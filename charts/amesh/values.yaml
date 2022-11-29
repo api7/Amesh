@@ -1,0 +1,98 @@
+istiod:
+  sidecarInjectorWebhook:
+    defaultTemplates: ["amesh"]
+    templates:
+      amesh: |
+        metadata:
+          labels:
+            service.istio.io/canonical-name: {{ index .ObjectMeta.Labels `service.istio.io/canonical-name` | default (index .ObjectMeta.Labels `app.kubernetes.io/name`) | default (index .ObjectMeta.Labels `app`) | default .DeploymentMeta.Name  | quote }}
+            service.istio.io/canonical-revision: {{ index .ObjectMeta.Labels `service.istio.io/canonical-revision` | default (index .ObjectMeta.Labels `app.kubernetes.io/version`) | default (index .ObjectMeta.Labels `version`) | default "latest"  | quote }}
+            istio.io/rev: {{ .Revision | default "default" | quote }}
+        spec:
+          initContainers:
+          - name: amesh-init
+
+        {{- if contains "/" .Values.global.proxy_init.image }}
+            image: "{{ .Values.global.proxy_init.image }}"
+        {{- else }}
+            image: "{{ .Values.global.proxy_init.hub }}/{{ .Values.global.proxy_init.image }}:{{ .Values.global.proxy_init.tag }}"
+        {{- end }}
+            imagePullPolicy: Always
+            args:
+              - --apisix-user
+              - nobody
+              - --apisix-inbound-capture-port
+              - "19081"
+              - --apisix-port
+              - "19080"
+              - --inbound-ports
+              - "*"
+              - --inbound-exclude-ports
+              - "15010,15810"
+              - --outbound-ports
+              - "*"
+              - --outbound-exclude-ports
+              - "15010,15810"
+            securityContext:
+              allowPrivilegeEscalation: true
+              privileged: true
+              capabilities:
+                add:
+                  - NET_ADMIN
+                  - NET_RAW
+                drop:
+                  - ALL
+              readOnlyRootFilesystem: false
+              runAsGroup: 0
+              runAsNonRoot: false
+              runAsUser: 0
+            restartPolicy: Always
+          containers:
+          - name: istio-proxy
+
+        {{- if contains "/" .Values.global.proxy.image }}
+            image: "{{ .Values.global.proxy.image }}"
+        {{- else }}
+            image: "{{ .Values.global.proxy.hub }}/{{ .Values.global.proxy.image }}:{{ .Values.global.proxy.tag }}"
+        {{- end }}
+            command: [ "sh", "-c" ]
+            args:
+              - |
+                /usr/bin/apisix init
+                /usr/local/openresty/bin/openresty -p /usr/local/apisix -g 'daemon off;' # remove /usr/bin/apisix init_etcd
+            securityContext:
+              allowPrivilegeEscalation: true
+              privileged: true
+              capabilities:
+                add:
+                  - NET_ADMIN
+                  - NET_RAW
+                drop:
+                  - ALL
+              readOnlyRootFilesystem: false
+              runAsGroup: 0
+              runAsNonRoot: false
+              runAsUser: 0
+            ports:
+              - containerPort: 19080
+                protocol: TCP
+                name: http-outbound
+              - containerPort: 19081
+                protocol: TCP
+                name: http-inbound
+            env:
+            - name: STATUS_SERVER_PORT
+              value: "9999"
+            - name: ISTIO_XDS_SOURCE
+              value: "grpc://istiod.{{ .Values.global.istioNamespace }}.svc:15010"
+            - name: AMESH_GRPC_SOURCE
+              value: "grpc://amesh-controller.{{ .Values.global.istioNamespace }}.svc:15810"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            imagePullPolicy: Always #"{{ valueOrDefault .Values.global.imagePullPolicy `Always` }}"

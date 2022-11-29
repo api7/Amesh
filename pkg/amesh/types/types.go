@@ -37,8 +37,6 @@ type Provisioner interface {
 	EventsChannel() <-chan []Event
 	// Run launches the provisioner.
 	Run(<-chan struct{}) error
-	// Status returns the provisioner status
-	Status() (string, error)
 	// GetData returns the specific data for status server
 	GetData(dataType string) (string, error)
 }
@@ -70,7 +68,7 @@ type Event struct {
 }
 
 type AmeshPluginProvider interface {
-	GetPlugins() []*ApisixPlugin
+	GetPlugins() map[string]*ApisixPlugin
 }
 
 type ApisixExtPluginConfig struct {

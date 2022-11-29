@@ -15,6 +15,7 @@
 BINDIR ?= ./bin
 ENABLE_PROXY ?= false
 REGISTRY ?="localhost:5000"
+ISTIO_RELEASE ?= 1.13.1
 REQUIRE_REBUILD_IPTABLES_IMAGE ?= true
 REQUIRE_REBUILD_CONTROLLER_IMAGE ?= true
 
@@ -161,3 +162,16 @@ update-imports:
 .PHONY install:
 install: build-amesh-so
 	$(INSTALL) -m 664 $(BINDIR)/libxds.so $(OPENRESTY_PREFIX)/
+
+.PHONY install-amesh:
+install-amesh:
+	helm install amesh --create-namespace \
+	 --namespace istio-system \
+	 --set pilot.image=istio/pilot:$(ISTIO_RELEASE) \
+	 --set global.proxy.privileged=true \
+	 --set global.proxy_init.image=$(REGISTRY)/amesh-iptables:dev \
+	 --set global.proxy.image=$(REGISTRY)/amesh-sidecar:dev \
+	 --set global.imagePullPolicy=IfNotPresent \
+	 --set global.hub="docker.io/istio" \
+	 --set global.tag="$(ISTIO_RELEASE)" \
+	 ./charts/amesh

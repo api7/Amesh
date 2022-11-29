@@ -91,7 +91,7 @@ spec:
         name: http-inbound
     env:
     - name: STATUS_SERVER_PORT
-      value: ""
+      value: "9999"
     - name: ISTIO_XDS_SOURCE
       value: "grpc://istiod.{{ .Values.global.istioNamespace }}.svc.cluster.local:15010"
     - name: AMESH_GRPC_SOURCE

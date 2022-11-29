@@ -288,6 +288,8 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 			Desc:       "GENERATED_BY_AMESH: VIRTUAL_HOST: " + vhost.Name,
 		}
 
+		r = p.patchAmeshPlugins(r)
+
 		//p.logger.Warnw("pre filter route",
 		//	zap.Any("route", route),
 		//	zap.Any("apisix_route", r),
@@ -298,12 +300,6 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 			continue
 		}
 
-		//p.logger.Warnw("pre filter route",
-		//	zap.Any("route", route),
-		//	zap.Any("apisix_route", r),
-		//)
-		r = p.patchAmeshPlugins(r)
-
 		routes = append(routes, r)
 	}
 	return routes, errors
@@ -311,12 +307,19 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 
 func (p *xdsProvisioner) patchAmeshPlugins(route *apisix.Route) *apisix.Route {
 	//route.Plugins = map[string]interface{}{}
-	plugins := p.amesh.GetPlugins()
+	ameshPlugins := p.amesh.GetPlugins()
+
+	for pluginName, _ := range route.Plugins {
+		if _, ok := ameshPlugins[pluginName]; !ok {
+			// Delete event
+			delete(route.Plugins, pluginName)
+		}
+	}
 
 	preReq := types.ApisixExtPluginConfig{}
 	postReq := types.ApisixExtPluginConfig{}
 	// TODO: reuse plugin configs?
-	for _, plugin := range plugins {
+	for _, plugin := range ameshPlugins {
 		switch plugin.Type {
 		case "":
 			route.Plugins[plugin.Name] = plugin.Config

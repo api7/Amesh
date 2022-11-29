@@ -160,7 +160,7 @@ func (f *Framework) initFramework() {
 		IstioImage:       f.args.LocalRegistry + "/" + f.opts.ControlPlaneImage,
 		SidecarInitImage: f.args.LocalRegistry + "/" + f.opts.SidecarInitImage,
 		SidecarImage:     f.args.LocalRegistry + "/" + f.opts.SidecarImage,
-		ChartsPath:       f.opts.ControlPlaneChartsPath,
+		ChartsPath:       filepath.Join(f.e2eHome, "../charts/amesh"),
 	}
 	f.cp = controlplane.NewIstioControlPlane(istioOpts)
 
@@ -292,35 +292,35 @@ func (f *Framework) dumpNamespace() {
 
 			// Get
 			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Cluster Resources ==="))
-			output, _ := k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "get", "deploy,sts,rs,svc,pods")
+			output, _ := f.RunKubectlCommand("get", "deploy,sts,rs,svc,pods")
 			if output != "" {
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
 
-			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "-n", f.ControlPlaneNamespace(), "get", "deploy,sts,rs,svc,pods")
+			output, _ = f.RunKubectlCommand("-n", f.ControlPlaneNamespace(), "get", "deploy,sts,rs,svc,pods")
 			if output != "" {
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
 
 			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Amesh Resources ==="))
-			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "get", "ampc")
+			output, _ = f.RunKubectlCommand("get", "ampc")
 			if output != "" {
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
 
 			// Describe
 			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Describe Amesh Resources ==="))
-			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "describe", "ampc")
+			output, _ = f.RunKubectlCommand("describe", "ampc")
 			if output != "" {
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
 
 			_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, color.RedString("=== Describe Pods ==="))
-			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "-n", f.ControlPlaneNamespace(), "describe", "pods")
+			output, _ = f.RunKubectlCommand("-n", f.ControlPlaneNamespace(), "describe", "pods")
 			if output != "" {
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
-			output, _ = k8s.RunKubectlAndGetOutputE(ginkgo.GinkgoT(), f.kubectlOpts, "describe", "pods")
+			output, _ = f.RunKubectlCommand("describe", "pods")
 			if output != "" {
 				_, _ = fmt.Fprintln(ginkgo.GinkgoWriter, output)
 			}
