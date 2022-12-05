@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tester
+package amesh
 
 import (
 	"time"
@@ -56,7 +56,7 @@ func (t *ReconnectTester) ValidateStatusAmeshIsOK() {
 		return t.f.GetSidecarStatus(t.curlPod).AmeshConnected, nil
 	}
 	err := utils.WaitExponentialBackoff(condFunc) // ignore timeout error
-	assert.Nil(ginkgo.GinkgoT(), err, "get amesh status")
+	utils.AssertNil(err, "get amesh status")
 
 	assert.Equal(ginkgo.GinkgoT(), true, t.f.GetSidecarStatus(t.curlPod).AmeshConnected, "amesh should connected")
 	assert.Equal(ginkgo.GinkgoT(), true, t.f.GetSidecarStatus(t.curlPod).AmeshProvisionerReady, "amesh provisioner should ready")

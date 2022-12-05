@@ -107,4 +107,26 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 		assert.NotContains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
 		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
 	})
+
+	utils.Case("inside mesh curl should be able to access outside mesh", func() {
+		// Inside Curl -> Inside HTTPBIN
+
+		httpbinName := "httpbin"
+		curlName := "consumer"
+
+		utils.ParallelRunAndWait(func() {
+			f.CreateHttpbinInMesh(httpbinName)
+			f.WaitForHttpbinReady(httpbinName)
+		}, func() {
+			f.CreateCurl(curlName)
+			f.WaitForCurlReady(curlName)
+		})
+		time.Sleep(time.Second * 3)
+
+		output := f.CurlInPod(curlName, httpbinName+"/ip")
+
+		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
+		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+	})
 })

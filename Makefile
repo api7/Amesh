@@ -165,6 +165,9 @@ install: build-amesh-so
 
 .PHONY install-amesh:
 install-amesh:
+	helm install amesh-controller -n istio-system --create-namespace \
+	 ./controller/charts/amesh-controller
+
 	helm install amesh --create-namespace \
 	 --namespace istio-system \
 	 --set pilot.image=istio/pilot:$(ISTIO_RELEASE) \

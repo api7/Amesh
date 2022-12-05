@@ -20,7 +20,6 @@ import (
 
 	"github.com/api7/amesh/e2e/framework"
 	"github.com/api7/amesh/e2e/framework/utils"
-	"github.com/api7/amesh/e2e/test/tester"
 	apisixutils "github.com/api7/amesh/pkg/apisix/utils"
 )
 
@@ -31,7 +30,7 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		// Inside Curl -> (Inside NGINX -> Outside HTTPBIN)
 		// Delete Inside NGINX and make it restart
 
-		t := tester.NewBaseTester(f)
+		t := NewBaseTester(f)
 
 		t.Create(false, true)
 		t.ValidateProxiedAndAccessible()
@@ -59,7 +58,7 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		// ->
 		// Inside Curl -> (Inside NGINX -> Outside HTTPBIN)
 
-		t := tester.NewBaseTester(f)
+		t := NewBaseTester(f)
 
 		t.Create(false, false)
 		t.ValidateNotProxiedAndAccessible()
@@ -74,7 +73,7 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		// ->
 		// Inside Curl -> (Outside NGINX -> Outside HTTPBIN)
 
-		t := tester.NewBaseTester(f)
+		t := NewBaseTester(f)
 
 		t.Create(false, true)
 		t.ValidateProxiedAndAccessible()
@@ -91,7 +90,7 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		// ->
 		// Inside Curl -> (Inside NGINX (Replica: 1) -> Outside HTTPBIN)
 
-		t := tester.NewBaseTester(f)
+		t := NewBaseTester(f)
 
 		t.Create(false, true)
 		t.ValidateProxiedAndAccessible()
@@ -118,7 +117,7 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		// ->
 		// Inside Curl -> (Inside NGINX (Replica: 1) -> Outside HTTPBIN)
 
-		t := tester.NewBaseTester(f)
+		t := NewBaseTester(f)
 
 		t.Create(false, true)
 		t.ValidateProxiedAndAccessible()
@@ -147,7 +146,7 @@ var _ = ginkgo.Describe("[deployment lifecycle]", func() {
 		// ->
 		// Inside Curl -> (Inside NGINX (Replica: 1) -> Outside HTTPBIN)
 
-		t := tester.NewBaseTester(f)
+		t := NewBaseTester(f)
 
 		t.Create(false, true, true)
 		beforeNodes := t.ValidateNginxUpstreamNodesCount(0)

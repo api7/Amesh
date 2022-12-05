@@ -285,7 +285,7 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 			UpstreamId: id.GenID(cluster),
 			Vars:       vars,
 			Plugins:    map[string]interface{}{},
-			Desc:       "GENERATED_BY_AMESH: VIRTUAL_HOST: " + vhost.Name,
+			Desc:       fmt.Sprintf("GENERATED_BY_AMESH: VIRTUAL_HOST: %v, NAME: %v, CLUSTER: %v", vhost.Name, route.Name, cluster),
 		}
 
 		r = p.patchAmeshPlugins(r)
@@ -530,13 +530,13 @@ func (p *xdsProvisioner) GetRoutesFromListener(l *listenerv3.Listener) ([]string
 				}
 				break
 			case xdswellknown.TCPProxy:
-				p.logger.Debugw("unsupported tcp proxy filter",
+				p.logger.Warnw("unsupported tcp proxy filter",
 					zap.String("name", f.Name),
 					zap.Any("config", f.GetTypedConfig()),
 				)
 				break
 			case xdswellknown.RateLimit:
-				p.logger.Debugw("unsupported rate limit filter",
+				p.logger.Warnw("unsupported rate limit filter",
 					zap.String("name", f.Name),
 					zap.Any("config", f.GetTypedConfig()),
 				)

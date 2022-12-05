@@ -18,6 +18,7 @@ import "C"
 import (
 	"context"
 	"os"
+	"strconv"
 	"unsafe"
 
 	"github.com/api7/gopkg/pkg/log"
@@ -37,7 +38,7 @@ func Log(msg string) {
 //export StartTestAmesh
 func StartTestAmesh(src string) {
 	ctx, cancel := context.WithCancel(context.Background())
-	agent, err := amesh.NewAgent(ctx, src, "", nil, nil, "debug", "stderr")
+	agent, err := amesh.NewAgent(ctx, src, "", 0, nil, nil, "debug", "stderr")
 	if err != nil {
 		utils.Dief("failed to create generator: %v", err.Error())
 	}
@@ -66,8 +67,17 @@ func initial(dataZone, versionZone unsafe.Pointer) {
 	if ameshGrpc == "" {
 		ameshGrpc = "grpc://amesh-controller.istio-system.svc.cluster.local:15810"
 	}
+	syncInterval := os.Getenv("AMESH_SYNC_INTERVAL")
+	if syncInterval == "" {
+		syncInterval = "10"
+	}
+	interval, err := strconv.Atoi(syncInterval)
+	if err != nil {
+		utils.Dief("parse interval failed: %v", err.Error())
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
-	agent, err := amesh.NewAgent(ctx, src, ameshGrpc, dataZone, versionZone, "debug", "stderr")
+	agent, err := amesh.NewAgent(ctx, src, ameshGrpc, interval, dataZone, versionZone, "debug", "stderr")
 	if err != nil {
 		utils.Dief("failed to create generator: %v", err.Error())
 	}

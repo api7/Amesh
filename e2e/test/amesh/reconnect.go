@@ -19,13 +19,12 @@ import (
 
 	"github.com/api7/amesh/e2e/framework"
 	"github.com/api7/amesh/e2e/framework/utils"
-	"github.com/api7/amesh/e2e/test/tester"
 )
 
 var _ = ginkgo.Describe("[amesh-controller functions] Controller Reconnect:", func() {
 	f := framework.NewDefaultFramework()
 	utils.Case("should be able to reconnect", func() {
-		t := tester.NewReconnectTester(f)
+		t := NewReconnectTester(f)
 
 		t.Create()
 		t.ValidateStatusAmeshIsOK()

@@ -16,6 +16,7 @@ package framework
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/api7/gopkg/pkg/log"
@@ -30,16 +31,22 @@ kind: Deployment
 metadata:
   name: {{ .Name }}
   labels:
+    appKind: httpbin
     app: {{ .Name }}
+    version: {{ .Version }}
 spec:
   replicas: {{ .HttpBinReplicas }}
   selector:
     matchLabels:
+      appKind: httpbin
       app: {{ .Name }}
+      version: {{ .Version }}
   template:
     metadata:
       labels:
+        appKind: httpbin
         app: {{ .Name }}
+        version: {{ .Version }}
       annotations:
         sidecar.istio.io/inject: "{{ .InMesh }}"
     spec:
@@ -65,20 +72,47 @@ spec:
     port: 80
     protocol: TCP
 `
+	httpbinService = `
+apiVersion: v1
+kind: Service
+metadata:
+  name: httpbin-kind
+spec:
+  selector:
+    appKind: httpbin
+  ports:
+  - name: http
+    targetPort: 80
+    port: 80
+    protocol: TCP
+`
 )
+
+func (f *Framework) CreateHttpbinService() {
+	utils.AssertNil(f.ApplyResourceFromString(httpbinService), "create httpbin service")
+}
 
 type httpbinRenderArgs struct {
 	*ManifestArgs
 	HttpBinReplicas int
 	Name            string
+	Version         string
 	InMesh          bool
 }
 
 func (f *Framework) newHttpBin(name string, inMesh bool) {
+	version := "v1"
+	if strings.HasSuffix(name, "-v2") {
+		version = "v2"
+	} else if strings.HasSuffix(name, "-v3") {
+		version = "v3"
+	}
+
 	artifact, err := utils.RenderManifest(_httpbinManifest, &httpbinRenderArgs{
 		ManifestArgs:    f.args,
 		HttpBinReplicas: 1,
 		Name:            name,
+		Version:         version,
 		InMesh:          inMesh,
 	})
 	utils.AssertNil(err, "render httpbin %s template", name)
@@ -112,8 +146,8 @@ func (f *Framework) WaitForHttpbinReady(nameOpt ...string) {
 		name = nameOpt[0]
 	}
 
-	log.Infof("wait for httpbin ready")
-	defer utils.LogTimeTrack(time.Now(), "httpbin ready (%v)")
+	log.Infof("wait for httpbin (%v) ready", name)
+	defer utils.LogTimeTrack(time.Now(), name+" ready (%v)")
 	utils.AssertNil(f.WaitForDeploymentPodsReady(name), "wait for httpbin ready")
 }
 
@@ -124,5 +158,5 @@ func (f *Framework) GetHttpBinServiceFQDN(nameOpt ...string) string {
 		name = nameOpt[0]
 	}
 
-	return fmt.Sprintf("%s.%s.svc.cluster.local", name, f.namespace)
+	return fmt.Sprintf("%s.%s.svc", name, f.namespace)
 }
