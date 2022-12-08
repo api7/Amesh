@@ -16,6 +16,7 @@ package framework
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/api7/gopkg/pkg/log"
@@ -78,6 +79,11 @@ func (f *Framework) GetPodNamesByLabel(namespace string, labelSelector string) (
 		names = append(names, pod.Name)
 	}
 	return names, nil
+}
+
+// GetServiceFQDN returns the FQDN description for HttpBin service.
+func (f *Framework) GetServiceFQDN(name string) string {
+	return fmt.Sprintf("%s.%s.svc", name, f.namespace)
 }
 
 // DeleteResourceFromString deletes a Kubernetes resource from the given manifest.

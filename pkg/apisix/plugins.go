@@ -32,3 +32,17 @@ type FaultInjection struct {
 	Abort *FaultInjectionAbort `json:"abort,omitempty"`
 	Delay *FaultInjectionDelay `json:"delay,omitempty"`
 }
+
+type TrafficSplitWeightedUpstreams struct {
+	UpstreamId string `json:"upstream_id,omitempty"`
+	Weight     uint32 `json:"weight,omitempty"`
+}
+
+type TrafficSplitRule struct {
+	Match             []*Var                           `json:"match,omitempty"`
+	WeightedUpstreams []*TrafficSplitWeightedUpstreams `json:"weighted_upstreams,omitempty"`
+}
+
+type TrafficSplit struct {
+	Rules []*TrafficSplitRule `json:"rules,omitempty"`
+}
