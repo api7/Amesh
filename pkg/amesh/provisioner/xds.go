@@ -56,6 +56,8 @@ type xdsProvisioner struct {
 
 	amesh *ameshProvisioner
 
+	syncInterval int
+
 	sendCh  chan *discoveryv3.DiscoveryRequest
 	recvCh  chan *discoveryv3.DiscoveryResponse
 	evChan  chan []types.Event
@@ -97,7 +99,7 @@ type XdsProvisionerStatus struct {
 }
 
 type Config struct {
-	// Running Id of this instance, it will be filled by
+	// Running id of this instance, it will be filled by
 	// a random string when the instance started.
 	RunId string
 	// The minimum log level that will be printed.
@@ -108,6 +110,8 @@ type Config struct {
 	XDSConfigSource string `json:"xds_config_source" yaml:"xds_config_source"`
 	// The Amesh source
 	AmeshConfigSource string `json:"amesh_config_source" yaml:"amesh_config_source"`
+	// SyncInternal is the periodical synchronization interval, 0 is never
+	SyncInternal int `json:"sync_internal" yaml:"sync_internal"`
 
 	Namespace string
 	IpAddress string
@@ -139,6 +143,8 @@ func NewXDSProvisioner(cfg *Config) (types.Provisioner, error) {
 		src:    src,
 		node:   node,
 		logger: logger,
+
+		syncInterval: cfg.SyncInternal,
 
 		sendCh:  make(chan *discoveryv3.DiscoveryRequest),
 		recvCh:  make(chan *discoveryv3.DiscoveryResponse),
@@ -319,26 +325,27 @@ func (p *xdsProvisioner) run(stop <-chan struct{}, client discoveryv3.Aggregated
 	go p.translateLoop(stop)
 	go p.firstSend()
 
-	// TODO: make periodic sync interval configurable
-	go func() {
-		timer := time.NewTimer(time.Second * 10)
-		for {
-			select {
-			case <-stop:
-				return
-			case <-timer.C:
-				dr := &discoveryv3.DiscoveryRequest{
-					Node:    p.node,
-					TypeUrl: types.ClusterUrl,
+	if p.syncInterval > 0 {
+		go func() {
+			timer := time.NewTimer(time.Second * time.Duration(p.syncInterval))
+			for {
+				select {
+				case <-stop:
+					return
+				case <-timer.C:
+					dr := &discoveryv3.DiscoveryRequest{
+						Node:    p.node,
+						TypeUrl: types.ClusterUrl,
+					}
+					p.logger.Debugw(color.BlueString("sending periodic sync discovery request"),
+						zap.String("type_url", dr.TypeUrl),
+					)
+					p.sendCh <- dr
+					timer.Reset(time.Second * 10)
 				}
-				p.logger.Debugw(color.BlueString("sending periodic sync discovery request"),
-					zap.String("type_url", dr.TypeUrl),
-				)
-				p.sendCh <- dr
-				timer.Reset(time.Second * 10)
 			}
-		}
-	}()
+		}()
+	}
 
 	p.ready = true
 	return nil
@@ -391,6 +398,7 @@ func (p *xdsProvisioner) sendLoop(stop <-chan struct{}, client discoveryv3.Aggre
 						zap.Error(err),
 						zap.String("xds_source", p.src),
 					)
+					// TODO: FIXME: Retry
 				}
 			}(dr)
 		}
@@ -489,7 +497,7 @@ func (p *xdsProvisioner) ignoreEds(clusterName string) bool {
 		"InboundPassthroughCluster", // InboundPassthroughClusterIpv4
 		"kubernetes.default.svc.cluster.local",
 		"kube-system.svc.cluster.local",
-		"istio-system.svc.cluster.local",
+		"istio-system.svc.cluster.local", // FIXME: namespace
 		xdsSrc,
 	}
 
@@ -522,17 +530,17 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) ([]strin
 				DiscardUnknown: true,
 			})
 
-			p.logger.Debugw(color.GreenString("process route configurations"),
-				zap.Any("route", &route),
-			)
-
 			if err != nil {
 				p.logger.Errorw("found invalid RouteConfiguration resource",
 					zap.Error(err),
 					zap.Any("resource", res),
 				)
-				return nil, err
+				continue
 			}
+
+			p.logger.Debugw(color.GreenString("process route configurations"),
+				zap.Any("route", &route),
+			)
 
 			partial, err := p.processRouteConfigurationV3(&route)
 			if err != nil {

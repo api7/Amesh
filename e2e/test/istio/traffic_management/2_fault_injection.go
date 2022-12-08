@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package istio
+package traffic_management
 
 import (
 	"net/http"
@@ -72,7 +72,7 @@ var _ = ginkgo.Describe("[istio functions] Fault Injection:", func() {
 			log.Errorf("status code is %v, please check logs", resp.Raw().StatusCode)
 			utils.DebugSleep(time.Hour)
 
-			assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
+			assert.Equal(ginkgo.GinkgoT(), 555, resp.Raw().StatusCode, "status code")
 		}
 		resp.Status(555)
 	})

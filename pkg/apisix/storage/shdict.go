@@ -84,5 +84,19 @@ func (s *SharedDictStorage) Delete(key string) {
 		return
 	}
 
-	// TODO
+	var keyCStr = C.CString(key)
+	defer C.free(unsafe.Pointer(keyCStr))
+	var keyLen = C.size_t(len(key))
+
+	errMsgBuf := make([]*C.char, 1)
+	var forcible = 0
+
+	C.ngx_http_lua_ffi_shdict_store(s.zone, 0x0004,
+		(*C.uchar)(unsafe.Pointer(keyCStr)), keyLen,
+		4,
+		nil, 0,
+		0, 0, 0,
+		(**C.char)(unsafe.Pointer(&errMsgBuf[0])),
+		(*C.int)(unsafe.Pointer(&forcible)),
+	)
 }

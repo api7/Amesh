@@ -174,7 +174,7 @@ func (f *Framework) initFramework() {
 }
 
 func (f *Framework) deploy() {
-	log.Infof(color.CyanString("=== Installing ==="))
+	log.Infof(color.CyanString("=== Installing Framework ==="))
 	defer utils.LogTimeTrack(time.Now(), "=== Installation Available (%v) ===")
 
 	e := utils.NewParallelExecutor("")

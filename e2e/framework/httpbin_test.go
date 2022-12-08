@@ -30,6 +30,7 @@ func TestName(t *testing.T) {
 		},
 		HttpBinReplicas: 1,
 		Name:            "httpbin",
+		Version:         "v3",
 		InMesh:          true,
 	})
 
@@ -39,16 +40,22 @@ kind: Deployment
 metadata:
   name: httpbin
   labels:
+    appKind: httpbin
     app: httpbin
+    version: v3
 spec:
   replicas: 1
   selector:
     matchLabels:
+      appKind: httpbin
       app: httpbin
+      version: v3
   template:
     metadata:
       labels:
+        appKind: httpbin
         app: httpbin
+        version: v3
       annotations:
         sidecar.istio.io/inject: "true"
     spec:

@@ -81,7 +81,7 @@ func getIpAddr() (string, error) {
 	return ipAddr, nil
 }
 
-func NewAgent(ctx context.Context, src, ameshGrpc string, dataZone, versionZone unsafe.Pointer, logLevel, logOutput string) (*Agent, error) {
+func NewAgent(ctx context.Context, src, ameshGrpc string, syncInterval int, dataZone, versionZone unsafe.Pointer, logLevel, logOutput string) (*Agent, error) {
 	color.NoColor = false
 
 	ipAddr, err := getIpAddr()
@@ -95,6 +95,7 @@ func NewAgent(ctx context.Context, src, ameshGrpc string, dataZone, versionZone 
 		LogOutput:         logOutput,
 		XDSConfigSource:   src,
 		AmeshConfigSource: ameshGrpc,
+		SyncInternal:      syncInterval,
 		Namespace:         getNamespace(),
 		IpAddress:         ipAddr,
 	})

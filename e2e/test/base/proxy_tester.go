@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tester
+package base
 
 import (
 	"strings"
@@ -28,7 +28,7 @@ import (
 	"github.com/api7/amesh/pkg/apisix"
 )
 
-type BaseTester struct {
+type ProxyTester struct {
 	f      *framework.Framework
 	logger *log.Logger
 
@@ -42,19 +42,19 @@ type BaseTester struct {
 	CurlPodName string
 }
 
-func NewBaseTester(f *framework.Framework) *BaseTester {
+func NewBaseTester(f *framework.Framework) *ProxyTester {
 	logger, err := log.NewLogger(
 		log.WithLogLevel("info"),
 		log.WithSkipFrames(3),
 	)
 	utils.AssertNil(err, "create logger")
-	return &BaseTester{
+	return &ProxyTester{
 		f:      f,
 		logger: logger,
 	}
 }
 
-func (t *BaseTester) Create(httpbinInside, nginxInside bool, unavailable ...bool) {
+func (t *ProxyTester) Create(httpbinInside, nginxInside bool, unavailable ...bool) {
 	f := t.f
 
 	t.HttpbinPodName = "httpbin"
@@ -107,14 +107,14 @@ func (t *BaseTester) Create(httpbinInside, nginxInside bool, unavailable ...bool
 // == Action functions ==
 // ========================
 
-func (t *BaseTester) DeleteAllNginxPods() {
+func (t *ProxyTester) DeleteAllNginxPods() {
 	log.Infof(color.BlueString("Delete " + t.NginxDeploymentName + " pods"))
 	utils.AssertNil(t.f.DeletePodByLabel(t.f.AppNamespace(), "app="+t.NginxDeploymentName), "delete nginx pods")
 	t.f.WaitForNginxReady(t.NginxDeploymentName)
 	time.Sleep(time.Second * 5)
 }
 
-func (t *BaseTester) DeletePartialNginxPods() {
+func (t *ProxyTester) DeletePartialNginxPods() {
 	log.Infof(color.BlueString("Delete partial " + t.NginxDeploymentName + " pods"))
 
 	podNames, err := t.f.GetDeploymentPodNames(t.f.AppNamespace(), t.NginxDeploymentName)
@@ -126,7 +126,7 @@ func (t *BaseTester) DeletePartialNginxPods() {
 	time.Sleep(time.Second * 5)
 }
 
-func (t *BaseTester) MakeNginxInMesh() {
+func (t *ProxyTester) MakeNginxInMesh() {
 	log.Infof(color.BlueString("Make " + t.NginxDeploymentName + " in mesh"))
 	t.f.MakeNginxInsideMesh(t.NginxDeploymentName, true)
 	t.f.WaitForNginxReady(t.NginxDeploymentName)
@@ -136,7 +136,7 @@ func (t *BaseTester) MakeNginxInMesh() {
 	time.Sleep(time.Second * 5)
 }
 
-func (t *BaseTester) MakeNginxOutsideMesh() {
+func (t *ProxyTester) MakeNginxOutsideMesh() {
 	log.Infof(color.BlueString("Make " + t.NginxDeploymentName + " outside mesh"))
 	t.f.MakeNginxOutsideMesh(t.NginxDeploymentName, true)
 	t.f.WaitForNginxReady(t.NginxDeploymentName)
@@ -146,21 +146,21 @@ func (t *BaseTester) MakeNginxOutsideMesh() {
 	time.Sleep(time.Second * 5)
 }
 
-func (t *BaseTester) MakeNginxUnavailable() {
+func (t *ProxyTester) MakeNginxUnavailable() {
 	log.Infof(color.BlueString("Make " + t.NginxDeploymentName + " unavailable"))
 	t.f.MakeNginxUnavailable(t.NginxDeploymentName)
 
 	time.Sleep(time.Second * 5)
 }
 
-func (t *BaseTester) MakeNginxAvailable() {
+func (t *ProxyTester) MakeNginxAvailable() {
 	log.Infof(color.BlueString("Make " + t.NginxDeploymentName + " available"))
 	t.f.MakeNginxAvailable(t.NginxDeploymentName, true)
 
 	time.Sleep(time.Second * 5)
 }
 
-func (t *BaseTester) ScaleNginx(replica int) {
+func (t *ProxyTester) ScaleNginx(replica int) {
 	log.Infof(color.BlueString("Scale nginx "+t.NginxDeploymentName+" to %v", replica))
 	t.f.ScaleNginx(t.NginxDeploymentName, replica, true)
 	time.Sleep(time.Second * 5)
@@ -170,7 +170,7 @@ func (t *BaseTester) ScaleNginx(replica int) {
 // == Validate functions ==
 // ========================
 
-func (t *BaseTester) ValidateProxiedAndAccessible() {
+func (t *ProxyTester) ValidateProxiedAndAccessible() {
 	time.Sleep(time.Second * 3)
 
 	output := t.f.CurlInPod(t.CurlPodName, t.NginxDeploymentName+"/ip")
@@ -179,19 +179,19 @@ func (t *BaseTester) ValidateProxiedAndAccessible() {
 	assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
 }
 
-func (t *BaseTester) ValidateNotAccessible() {
+func (t *ProxyTester) ValidateNotAccessible() {
 	output := t.f.CurlInPod(t.CurlPodName, t.NginxDeploymentName+"/ip")
 	assert.NotContains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
 }
 
-func (t *BaseTester) ValidateNotProxiedAndAccessible() {
+func (t *ProxyTester) ValidateNotProxiedAndAccessible() {
 	output := t.f.CurlInPod(t.CurlPodName, t.NginxDeploymentName+"/ip")
 	assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
 	assert.NotContains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
 	assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
 }
 
-func (t *BaseTester) ValidateNginxUpstreamNodesCount(count int) []*apisix.Node {
+func (t *ProxyTester) ValidateNginxUpstreamNodesCount(count int) []*apisix.Node {
 	upstreams := t.f.GetSidecarUpstreams(t.CurlPodName)
 	var nginxUpstream *apisix.Upstream
 	for _, upstream := range upstreams {
