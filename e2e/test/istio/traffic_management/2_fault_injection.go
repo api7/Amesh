@@ -41,6 +41,7 @@ var _ = ginkgo.Describe("[istio functions] Fault Injection:", func() {
 			HeaderValue: "fault-abort",
 			Status:      555,
 		})
+		time.Sleep(time.Second * 5)
 
 		ngxName := f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(name), true)
 		f.WaitForNginxReady(ngxName)
@@ -64,7 +65,7 @@ var _ = ginkgo.Describe("[istio functions] Fault Injection:", func() {
 
 		// Validate User:fault-abort access
 		resp = client.GET("/ip").
-			WithHeader("Host", f.GetHttpBinServiceFQDN(name)).
+			WithHeader("Host", f.GetServiceFQDN(ngxName)).
 			WithHeader("User", "fault-abort").
 			Expect()
 

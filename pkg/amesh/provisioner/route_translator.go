@@ -79,101 +79,6 @@ func (p *xdsProvisioner) TranslateRouteConfiguration(r *routev3.RouteConfigurati
 	return routes, nil
 }
 
-func (p *xdsProvisioner) convertPercentage(percent *typev3.FractionalPercent) uint32 {
-	if percent == nil {
-		return 0
-	}
-
-	percentage := percent.Numerator / uint32(percent.Denominator)
-	if percentage > 100 {
-		percentage = 100
-	}
-	return percentage
-}
-
-func (p *xdsProvisioner) translateRouteFilters(xdsRoute *routev3.Route, apisixRoute *apisix.Route) error {
-	for filterName, data := range xdsRoute.TypedPerFilterConfig {
-
-		p.logger.Debugw(color.GreenString("process route filter"),
-			zap.Any("filter_type", filterName),
-			zap.Any("config", data),
-		)
-
-		switch filterName {
-		case xdswellknown.Fault:
-			if data.GetTypeUrl() == _httpFaultV3 {
-				log.Infof("got route http.fault filter")
-
-				var fault faultv3.HTTPFault
-				if err := anypb.UnmarshalTo(data, &fault, proto.UnmarshalOptions{}); err != nil {
-					log.Errorw("failed to unmarshal HTTPFault config",
-						zap.Error(err),
-						zap.Any("route", xdsRoute.Name),
-					)
-					continue
-				}
-
-				faultPlugin := &apisix.FaultInjection{}
-
-				// abort
-				if fault.Abort != nil {
-					faultPlugin.Abort = &apisix.FaultInjectionAbort{}
-					// status
-					switch v := fault.Abort.ErrorType.(type) {
-					case *faultv3.FaultAbort_HttpStatus:
-						faultPlugin.Abort.HttpStatus = v.HttpStatus
-					default:
-						// TODO: other types
-						p.logger.Warnw("unsupported HTTPFault error type",
-							zap.String("typed_url", data.GetTypeUrl()),
-							zap.Any("config", data),
-							zap.Any("type", reflect.TypeOf(v)),
-						)
-						continue
-					}
-
-					faultPlugin.Abort.Percentage = p.convertPercentage(fault.Abort.Percentage)
-				}
-
-				// delay
-				if fault.Delay != nil {
-					faultPlugin.Delay = &apisix.FaultInjectionDelay{}
-
-					switch v := fault.Delay.FaultDelaySecifier.(type) {
-					case *commonfaultv3.FaultDelay_FixedDelay:
-						faultPlugin.Delay.Duration = v.FixedDelay.Seconds
-					default:
-						// TODO: other types
-						p.logger.Warnw("unsupported HTTPFault error type",
-							zap.String("typed_url", data.GetTypeUrl()),
-							zap.Any("config", data),
-							zap.Any("type", reflect.TypeOf(v)),
-						)
-						continue
-					}
-
-					faultPlugin.Delay.Percentage = p.convertPercentage(fault.Delay.Percentage)
-				}
-
-				apisixRoute.Plugins["fault-injection"] = faultPlugin
-			} else {
-				p.logger.Warnw("unsupported HTTPFault version",
-					zap.String("typed_url", data.GetTypeUrl()),
-					zap.Any("config", data),
-				)
-			}
-			break
-		default:
-			p.logger.Warnw("unsupported http filter",
-				zap.String("name", filterName),
-				zap.Any("config", data),
-			)
-		}
-	}
-
-	return nil
-}
-
 func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.VirtualHost) ([]*apisix.Route, error) {
 	if routeName == "" {
 		routeName = "anon"
@@ -217,6 +122,7 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 
 		cluster, err := p.getClusterName(route)
 		if err != nil {
+			errors = multierror.Append(err)
 			p.logger.Warnw("failed to get cluster name, skipped",
 				zap.Error(err),
 				zap.Any("route", route),
@@ -225,6 +131,7 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 		}
 		uri, err := p.getURL(route)
 		if err != nil {
+			errors = multierror.Append(err)
 			p.logger.Warnw("failed to get url from path specifier, skipped",
 				zap.Error(err),
 				zap.Any("route", route),
@@ -248,6 +155,7 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 
 		queryVars, err := p.getParametersMatchVars(route)
 		if err != nil {
+			errors = multierror.Append(err)
 			p.logger.Warnw("failed to get parameter match variable, skipped",
 				zap.Error(err),
 				zap.Any("route", route),
@@ -256,6 +164,7 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 		}
 		vars, err := p.getHeadersMatchVars(route)
 		if err != nil {
+			errors = multierror.Append(err)
 			p.logger.Warnw("failed to get header match variable, skipped",
 				zap.Error(err),
 				zap.Any("route", route),
@@ -297,6 +206,20 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 		err = p.translateRouteFilters(route, r)
 		if err != nil {
 			errors = multierror.Append(err)
+			p.logger.Warnw("failed to translate route filters, skipped",
+				zap.Error(err),
+				zap.Any("route", route),
+			)
+			continue
+		}
+
+		err = p.translateRoutePlugins(route, r)
+		if err != nil {
+			errors = multierror.Append(err)
+			p.logger.Warnw("failed to translate route plugins, skipped",
+				zap.Error(err),
+				zap.Any("route", route),
+			)
 			continue
 		}
 
@@ -345,16 +268,23 @@ func (p *xdsProvisioner) patchAmeshPlugins(route *apisix.Route) *apisix.Route {
 	return route
 }
 
-func (p *xdsProvisioner) getClusterName(route *routev3.Route) (string, error) {
-	action, ok := route.GetAction().(*routev3.Route_Route)
-	if !ok {
-		return "", fmt.Errorf("unsupported route action type %T", route.GetAction())
+func (p *xdsProvisioner) getClusterName(xdsRoute *routev3.Route) (string, error) {
+	route := xdsRoute.GetRoute()
+	if route == nil {
+		return "", fmt.Errorf("unsupported route action type %T", xdsRoute.GetAction())
 	}
-	cluster, ok := action.Route.GetClusterSpecifier().(*routev3.RouteAction_Cluster)
-	if !ok {
-		return "", fmt.Errorf("unsupported cluster specifier type %T", action.Route.GetClusterSpecifier())
+
+	clusterSpecifier := route.GetClusterSpecifier()
+	switch v := clusterSpecifier.(type) {
+	case *routev3.RouteAction_Cluster:
+		return v.Cluster, nil
+	case *routev3.RouteAction_WeightedClusters:
+		clusters := v.WeightedClusters.Clusters
+		// pick last cluster as default upstream
+		return clusters[len(clusters)-1].Name, nil
+	default:
+		return "", fmt.Errorf("unsupported cluster specifier type %T", route.GetClusterSpecifier())
 	}
-	return cluster.Cluster, nil
 }
 
 func (p *xdsProvisioner) getURL(route *routev3.Route) (string, error) {
@@ -489,6 +419,137 @@ func patchRoutesWithOriginalDestination(routes []*apisix.Route, origDst string) 
 	//		r.Vars = append(r.Vars, &apisix.Var{"connection_original_dst", "==", origDst})
 	//	}
 	//}
+}
+
+func (p *xdsProvisioner) convertPercentage(percent *typev3.FractionalPercent) uint32 {
+	if percent == nil {
+		return 0
+	}
+
+	percentage := percent.Numerator / uint32(percent.Denominator)
+	if percentage > 100 {
+		percentage = 100
+	}
+	return percentage
+}
+
+func (p *xdsProvisioner) translateRouteFilters(xdsRoute *routev3.Route, apisixRoute *apisix.Route) error {
+	for filterName, data := range xdsRoute.TypedPerFilterConfig {
+		p.logger.Debugw(color.GreenString("process route filter"),
+			zap.Any("filter_type", filterName),
+			zap.Any("config", data),
+		)
+
+		switch filterName {
+		case xdswellknown.Fault:
+			if data.GetTypeUrl() == _httpFaultV3 {
+				log.Infof("got route http.fault filter")
+
+				var fault faultv3.HTTPFault
+				if err := anypb.UnmarshalTo(data, &fault, proto.UnmarshalOptions{}); err != nil {
+					log.Errorw("failed to unmarshal HTTPFault config",
+						zap.Error(err),
+						zap.Any("route", xdsRoute.Name),
+					)
+					continue
+				}
+
+				faultPlugin := &apisix.FaultInjection{}
+
+				// abort
+				if fault.Abort != nil {
+					faultPlugin.Abort = &apisix.FaultInjectionAbort{}
+					// status
+					switch v := fault.Abort.ErrorType.(type) {
+					case *faultv3.FaultAbort_HttpStatus:
+						faultPlugin.Abort.HttpStatus = v.HttpStatus
+					default:
+						// TODO: other types
+						p.logger.Warnw("unsupported HTTPFault error type",
+							zap.String("typed_url", data.GetTypeUrl()),
+							zap.Any("config", data),
+							zap.Any("type", reflect.TypeOf(v)),
+						)
+						continue
+					}
+
+					faultPlugin.Abort.Percentage = p.convertPercentage(fault.Abort.Percentage)
+				}
+
+				// delay
+				if fault.Delay != nil {
+					faultPlugin.Delay = &apisix.FaultInjectionDelay{}
+
+					switch v := fault.Delay.FaultDelaySecifier.(type) {
+					case *commonfaultv3.FaultDelay_FixedDelay:
+						faultPlugin.Delay.Duration = v.FixedDelay.Seconds
+					default:
+						// TODO: other types
+						p.logger.Warnw("unsupported HTTPFault error type",
+							zap.String("typed_url", data.GetTypeUrl()),
+							zap.Any("config", data),
+							zap.Any("type", reflect.TypeOf(v)),
+						)
+						continue
+					}
+
+					faultPlugin.Delay.Percentage = p.convertPercentage(fault.Delay.Percentage)
+				}
+
+				apisixRoute.Plugins["fault-injection"] = faultPlugin
+			} else {
+				p.logger.Warnw("unsupported HTTPFault version",
+					zap.String("typed_url", data.GetTypeUrl()),
+					zap.Any("config", data),
+				)
+			}
+			break
+		default:
+			p.logger.Warnw("unsupported http filter",
+				zap.String("name", filterName),
+				zap.Any("config", data),
+			)
+		}
+	}
+
+	return nil
+}
+
+func (p *xdsProvisioner) translateRoutePlugins(xdsRoute *routev3.Route, apisixRoute *apisix.Route) error {
+	route := xdsRoute.GetRoute()
+	if route == nil {
+		return nil
+	}
+	weightedClusters := route.GetWeightedClusters()
+	if weightedClusters == nil {
+		return nil
+	}
+
+	clusters := weightedClusters.Clusters
+	weighted := make([]*apisix.TrafficSplitWeightedUpstreams, len(clusters))
+	for i, weightedCluster := range clusters {
+		p.logger.Debugw("translating weighted cluster",
+			zap.Any("cluster", weightedCluster),
+			zap.Any("index", i),
+		)
+		weighted[i] = &apisix.TrafficSplitWeightedUpstreams{
+			Weight: weightedCluster.Weight.Value,
+		}
+		if i != len(clusters)-1 {
+			// last one is default upstream
+			weighted[i].UpstreamId = id.GenID(weightedCluster.Name)
+		}
+	}
+
+	apisixRoute.Plugins["traffic-split"] = &apisix.TrafficSplit{
+		Rules: []*apisix.TrafficSplitRule{
+			{
+				WeightedUpstreams: weighted,
+			},
+		},
+	}
+
+	return nil
 }
 
 func (p *xdsProvisioner) GetRoutesFromListener(l *listenerv3.Listener) ([]string, []*routev3.RouteConfiguration, error) {

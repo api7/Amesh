@@ -120,11 +120,6 @@ func (f *Framework) queryStatusServer(podName, api string) string {
 	cmd := []string{"exec", podName, "-c", "istio-proxy", "--", "curl", "-s", "localhost:9999/" + api}
 	output, err := f.RunKubectlCommand(cmd...)
 
-	log.SkipFramesOnce(1)
-	log.Infof("Executing: kubectl " + strings.Join(cmd, " "))
-	if err != nil {
-		log.Errorf("get sidecar %s status failed: %s", podName, err.Error())
-	}
 	utils.AssertNil(err, "failed to get sidecar %s status", podName)
 
 	return output

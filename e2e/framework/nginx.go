@@ -101,9 +101,10 @@ data:
         }
         location / {
             proxy_pass http://{{ .ProxyService }};
-            proxy_set_header Host {{ .ProxyService }};
-            proxy_http_version 1.1;
             proxy_set_header Connection "";
+            proxy_set_header Host {{ .ProxyService }};
+            proxy_pass_request_headers on;
+            proxy_http_version 1.1;
         }
     }
 `
