@@ -34,13 +34,41 @@ var _ = ginkgo.Describe("[istio functions] Fault Injection:", func() {
 		f.CreateHttpbinInMesh(name)
 		f.WaitForHttpbinReady(name)
 
-		f.CreateVirtualServiceWithFaultAbort(&framework.FaultAbortArgs{
-			Name:        "virtual-service-" + name,
-			Host:        name,
-			Header:      "User",
-			HeaderValue: "fault-abort",
-			Status:      555,
+		err := f.ApplyVirtualService(&framework.VirtualServiceConfig{
+			Host: name,
+			Destinations: map[string]struct{}{
+				"v1": {},
+			},
+			Routes: []*framework.RouteConfig{
+				{
+					Match: &framework.RouteMatchRule{
+						Headers: map[string]string{
+							"User": "fault-abort",
+						},
+					},
+					Fault: &framework.RouteFaultRule{
+						Abort: &framework.RouteFaultAbortRule{
+							StatusCode: 555,
+							Percentage: 100,
+						},
+						Delay: nil,
+					},
+					Destinations: map[string]*framework.RouteDestinationConfig{
+						"v1": {
+							Weight: 100,
+						},
+					},
+				},
+				{
+					Destinations: map[string]*framework.RouteDestinationConfig{
+						"v1": {
+							Weight: 100,
+						},
+					},
+				},
+			},
 		})
+		utils.AssertNil(err)
 		time.Sleep(time.Second * 5)
 
 		ngxName := f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(name), true)
@@ -76,5 +104,89 @@ var _ = ginkgo.Describe("[istio functions] Fault Injection:", func() {
 			assert.Equal(ginkgo.GinkgoT(), 555, resp.Raw().StatusCode, "status code")
 		}
 		resp.Status(555)
+	})
+
+	utils.Case("should be able to delay", func() {
+		name := "delay-httpbin"
+
+		f.CreateHttpbinInMesh(name)
+		f.WaitForHttpbinReady(name)
+
+		err := f.ApplyVirtualService(&framework.VirtualServiceConfig{
+			Host: name,
+			Destinations: map[string]struct{}{
+				"v1": {},
+			},
+			Routes: []*framework.RouteConfig{
+				{
+					Match: &framework.RouteMatchRule{
+						Headers: map[string]string{
+							"User": "fault-delay",
+						},
+					},
+					Fault: &framework.RouteFaultRule{
+						Delay: &framework.RouteFaultDelayRule{
+							Duration:   10,
+							Percentage: 100,
+						},
+						Abort: nil,
+					},
+					Destinations: map[string]*framework.RouteDestinationConfig{
+						"v1": {
+							Weight: 100,
+						},
+					},
+				},
+				{
+					Destinations: map[string]*framework.RouteDestinationConfig{
+						"v1": {
+							Weight: 100,
+						},
+					},
+				},
+			},
+		})
+		utils.AssertNil(err)
+		time.Sleep(time.Second * 5)
+
+		ngxName := f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(name), true)
+		f.WaitForNginxReady(ngxName)
+
+		time.Sleep(time.Second * 5)
+
+		client, _ := f.NewHTTPClientToNginx(ngxName)
+
+		// Validate normal access
+		resp := client.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN(name)).Expect()
+
+		if resp.Raw().StatusCode != http.StatusOK {
+			log.Errorf("status code is %v, please check logs", resp.Raw().StatusCode)
+			utils.DebugSleep(time.Hour)
+
+			assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
+		}
+		resp.Status(http.StatusOK)
+		resp.Headers().Value("Via").Array().Contains("APISIX")
+		resp.Body().Contains("origin")
+
+		// Validate User:fault-delay access
+		start := time.Now()
+		resp = client.GET("/ip").
+			WithHeader("Host", f.GetServiceFQDN(ngxName)).
+			WithHeader("User", "fault-delay").
+			Expect()
+		duration := time.Since(start)
+
+		if resp.Raw().StatusCode != http.StatusOK {
+			log.Errorf("status code is %v, please check logs", resp.Raw().StatusCode)
+			utils.DebugSleep(time.Hour)
+
+			assert.Equal(ginkgo.GinkgoT(), http.StatusOK, resp.Raw().StatusCode, "status code")
+		}
+		resp.Status(http.StatusOK)
+
+		log.Infof("The timeout is: %v", duration)
+		assert.True(ginkgo.GinkgoT(), duration > time.Second*10)
+		assert.True(ginkgo.GinkgoT(), duration < time.Second*12)
 	})
 })

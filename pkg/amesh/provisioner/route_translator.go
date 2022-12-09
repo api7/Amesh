@@ -197,6 +197,15 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 			Desc:       fmt.Sprintf("GENERATED_BY_AMESH: VIRTUAL_HOST: %v, NAME: %v, CLUSTER: %v", vhost.Name, route.Name, cluster),
 		}
 
+		timeoutSettings := route.GetRoute().GetTimeout()
+		if timeoutSettings != nil && timeoutSettings.Seconds > 0 {
+			timeout := timeoutSettings.Seconds
+			r.Timeout = &apisix.Timeout{
+				Connect: float64(timeout),
+				Send:    float64(timeout),
+				Read:    float64(timeout),
+			}
+		}
 		r = p.patchAmeshPlugins(r)
 
 		//p.logger.Warnw("pre filter route",
