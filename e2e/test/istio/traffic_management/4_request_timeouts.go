@@ -15,120 +15,51 @@
 package traffic_management
 
 import (
-	"github.com/stretchr/testify/assert"
+	"net/http"
 	"time"
+
+	"github.com/onsi/ginkgo/v2"
 
 	"github.com/api7/amesh/e2e/framework"
 	"github.com/api7/amesh/e2e/framework/utils"
-	"github.com/onsi/ginkgo/v2"
 )
 
 var _ = ginkgo.Describe("[istio functions] Route Configuration:", func() {
 	f := framework.NewDefaultFramework()
 	utils.Case("should be able to config timeout", func() {
-		httpbinName := "delay-httpbin"
+		tester := NewVirtualServiceTester(f, []string{"v1"})
 
-		f.CreateHttpbinInMesh(httpbinName)
-		f.WaitForHttpbinReady(httpbinName)
+		tester.Create()
 
-		err := f.ApplyVirtualService(&framework.VirtualServiceConfig{
-			Host: httpbinName,
-			Destinations: map[string]struct{}{
-				"v1": {},
-			},
-			Routes: []*framework.RouteConfig{
-				{
-					Match: &framework.RouteMatchRule{
-						Headers: map[string]string{
-							"User": "fault-delay",
-						},
-					},
-					Fault: &framework.RouteFaultRule{
-						Delay: &framework.RouteFaultDelayRule{
-							Duration:   10,
-							Percentage: 100,
-						},
-						Abort: nil,
-					},
-					Destinations: map[string]*framework.RouteDestinationConfig{
-						"v1": {
-							Weight: 100,
-						},
-					},
-				},
-				{
-					Destinations: map[string]*framework.RouteDestinationConfig{
-						"v1": {
-							Weight: 100,
-						},
-					},
-				},
-			},
+		// Case 1, timeout
+		// apply routes
+		tester.AddRouteToWithDelayFault("httpbin-kind", "v1", "User", "fault-delay", 10)
+		tester.AddRouteTo("httpbin-kind", "v1")
+		tester.AddRouteToWithTimeout("nginx-kind", "v1", 5)
+		tester.ApplyRoute()
+
+		// validate access with timeout
+		tester.ValidateTimeout(0, time.Second*5, func() {
+			tester.ValidateAccessible("origin", "nginx-kind/ip")
 		})
-		utils.AssertNil(err)
-		time.Sleep(time.Second * 5)
-
-		ngxName := f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(httpbinName), true)
-		f.WaitForNginxReady(ngxName)
-
-		time.Sleep(time.Second * 5)
-
-		err = f.ApplyVirtualService(&framework.VirtualServiceConfig{
-			Host: ngxName,
-			Destinations: map[string]struct{}{
-				"v1": {},
-			},
-			Routes: []*framework.RouteConfig{
-				{
-					Destinations: map[string]*framework.RouteDestinationConfig{
-						"v1": {
-							Weight: 100,
-						},
-					},
-					Timeout: 5,
-				},
-			},
+		// validate longer than 5s (toleration timeout) but shorter than 10s (actual service timeout)
+		tester.ValidateTimeout(time.Second*5, time.Second*8, func() {
+			tester.ValidateInaccessible(http.StatusGatewayTimeout, "origin", "nginx-kind/ip", "-H", "User: fault-delay")
 		})
-		utils.AssertNil(err)
-		time.Sleep(time.Second * 5)
 
-		curl := f.CreateCurl()
-		f.WaitForCurlReady(curl)
+		// Case 2, tolerate timeout
+		// apply routes
+		tester.ClearRoute("nginx-kind")
+		tester.AddRouteToWithTimeout("nginx-kind", "v1", 12)
+		tester.ApplyRoute()
 
-		// Make sure the route works fine
-		output := f.CurlInPod(curl, ngxName+"/ip")
-
-		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
-
-		// Make sure the timeout works
-		output = f.CurlInPod(curl, ngxName+"/ip", "-H", "User: fault-delay")
-		assert.Contains(ginkgo.GinkgoT(), output, "504 Gateway Time-out", "make sure it works properly")
-
-		// Increase timeout toleration, should work again
-		err = f.ApplyVirtualService(&framework.VirtualServiceConfig{
-			Host: ngxName,
-			Destinations: map[string]struct{}{
-				"v1": {},
-			},
-			Routes: []*framework.RouteConfig{
-				{
-					Destinations: map[string]*framework.RouteDestinationConfig{
-						"v1": {
-							Weight: 100,
-						},
-					},
-					Timeout: 12,
-				},
-			},
+		// validate accessible
+		tester.ValidateTimeout(0, time.Second*5, func() {
+			tester.ValidateAccessible("origin", "nginx-kind/ip")
 		})
-		utils.AssertNil(err)
-		time.Sleep(time.Second * 5)
-
-		output = f.CurlInPod(curl, ngxName+"/ip", "-H", "User: fault-delay")
-		assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
-		assert.Contains(ginkgo.GinkgoT(), output, "origin", "make sure it works properly")
+		// validate longer than 10s (actual service timeout) but shorter than 12s (toleration timeout)
+		tester.ValidateTimeout(time.Second*10, time.Second*12, func() {
+			tester.ValidateAccessible("origin", "nginx-kind/ip", "-H", "User: fault-delay")
+		})
 	})
 })

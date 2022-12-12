@@ -36,7 +36,7 @@ type RouteConfig struct {
 
 type VirtualServiceConfig struct {
 	Host         string
-	Destinations map[string]struct{}
+	Destinations []string
 	Routes       []*RouteConfig
 }
 
@@ -49,7 +49,7 @@ metadata:
 spec:
   host: {{ .Host }}
   subsets:
-{{- range $destKey, $routeConfig := .Destinations }}
+{{- range $idx, $destKey := .Destinations }}
   - name: {{ $destKey }}
     labels:
       version: {{ $destKey }}

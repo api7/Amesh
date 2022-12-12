@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/api7/gopkg/pkg/log"
@@ -60,7 +61,8 @@ type Framework struct {
 	amesh     ameshcontroller.AmeshController
 	namespace string
 
-	appArgs map[string]interface{}
+	appArgsLock sync.RWMutex
+	appArgs     map[string]interface{}
 }
 
 type Options struct {

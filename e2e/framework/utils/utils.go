@@ -241,7 +241,7 @@ func caseWrapper(name string, f func()) func() {
 		started := time.Now()
 		defer func() {
 			log.SkipFramesOnce(99)
-			log.Infof(color.GreenString(fmt.Sprintf("=== CaseEnd: %v ===", time.Since(started))))
+			log.Infof(color.GreenString(fmt.Sprintf("=== CaseEnd : %v (%s) ===", time.Since(started), name)))
 		}()
 
 		f()

@@ -20,6 +20,7 @@ import (
 
 	"github.com/api7/gopkg/pkg/id"
 	"github.com/api7/gopkg/pkg/log"
+	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	commonfaultv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/common/fault/v3"
@@ -435,11 +436,28 @@ func (p *xdsProvisioner) convertPercentage(percent *typev3.FractionalPercent) ui
 		return 0
 	}
 
-	percentage := percent.Numerator / uint32(percent.Denominator)
+	var percentage uint32
+	switch percent.Denominator {
+	case typev3.FractionalPercent_MILLION:
+		percentage = percent.Numerator / 10000
+	case typev3.FractionalPercent_TEN_THOUSAND:
+		percentage = percent.Numerator / 100
+	case typev3.FractionalPercent_HUNDRED:
+		percentage = percent.Numerator
+	}
 	if percentage > 100 {
 		percentage = 100
 	}
 	return percentage
+}
+
+func (p *xdsProvisioner) convertRuntimePercentage(percent *corev3.RuntimeFractionalPercent) uint32 {
+	if percent == nil {
+		return 0
+	}
+
+	v := percent.GetDefaultValue()
+	return p.convertPercentage(v)
 }
 
 func (p *xdsProvisioner) translateRouteFilters(xdsRoute *routev3.Route, apisixRoute *apisix.Route) error {
@@ -529,6 +547,21 @@ func (p *xdsProvisioner) translateRoutePlugins(xdsRoute *routev3.Route, apisixRo
 	if route == nil {
 		return nil
 	}
+
+	err := p.translateRouteWeightedClusters(route, apisixRoute)
+	if err != nil {
+		return err
+	}
+
+	err = p.translateRouteMirror(route, apisixRoute)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *xdsProvisioner) translateRouteWeightedClusters(route *routev3.RouteAction, apisixRoute *apisix.Route) error {
 	weightedClusters := route.GetWeightedClusters()
 	if weightedClusters == nil {
 		return nil
@@ -557,6 +590,21 @@ func (p *xdsProvisioner) translateRoutePlugins(xdsRoute *routev3.Route, apisixRo
 			},
 		},
 	}
+
+	return nil
+}
+
+func (p *xdsProvisioner) translateRouteMirror(route *routev3.RouteAction, apisixRoute *apisix.Route) error {
+	mirrors := route.GetRequestMirrorPolicies()
+	if len(mirrors) == 0 {
+		return nil
+	}
+	// TODO: how proxy-mirror works with traffic-split?
+	mirror := mirrors[0]
+	cluster := mirror.Cluster
+	percentage := p.convertRuntimePercentage(mirror.RuntimeFraction)
+
+	_, _ = cluster, percentage
 
 	return nil
 }

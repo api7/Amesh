@@ -9,12 +9,11 @@ import (
 func TestVirtualServiceManifest(t *testing.T) {
 	vs := &VirtualServiceConfig{
 		Host: "nginx-kind",
-		Destinations: map[string]struct{}{
-			"v1": {},
-			"v2": {},
+		Destinations: []string{
+			"v1",
+			"v2",
 		},
 		Routes: []*RouteConfig{
-			// this key is route name, not dest key
 			{
 				Match: &RouteMatchRule{
 					Headers: map[string]string{
