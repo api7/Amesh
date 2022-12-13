@@ -16,7 +16,6 @@ package traffic_management
 
 import (
 	"strings"
-	"time"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/stretchr/testify/assert"
@@ -27,90 +26,20 @@ import (
 
 var _ = ginkgo.Describe("[istio functions] Route Configuration:", func() {
 	f := framework.NewDefaultFramework()
-	utils.Case("should be able to abort", func() {
-		apply := func(str string) {
-			err := f.ApplyResourceFromString(str)
-			utils.AssertNil(err, "apply resource")
+	utils.Case("should be able to split traffic", func() {
+		tester := NewVirtualServiceTester(f, []string{"v1", "v2"})
 
-			time.Sleep(time.Second * 5)
-		}
+		tester.Create()
 
-		// deploy apps
-		httpbinV1 := "httpbin-v1"
-		httpbinV2 := "httpbin-v2"
-		httpbinService := "httpbin-kind" // versioned httpbin service
-		nginxService := "nginx-kind"     // versioned nginx service
+		// apply routes
+		tester.AddWeightedRoutes("nginx-kind", []string{"v1", "v2"})
+		tester.ApplyRoute()
 
-		ngxV1Name := "ngx-v1"
-		ngxV2Name := "ngx-v2"
-		utils.ParallelRunAndWait(func() {
-			f.CreateHttpbinInMesh(httpbinV1)
-			f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(httpbinService), true, ngxV1Name)
-
-			f.WaitForHttpbinReady(httpbinV1)
-			f.WaitForNginxReady(ngxV1Name)
-		}, func() {
-			f.CreateHttpbinInMesh(httpbinV2)
-			f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(httpbinService), true, ngxV2Name)
-
-			f.WaitForHttpbinReady(httpbinV2)
-			f.WaitForNginxReady(ngxV2Name)
-		}, func() {
-			f.CreateNginxService()
-			f.CreateHttpbinService()
-		})
-
-		time.Sleep(time.Second * 5)
-
-		// destination rule
-		apply(`
-apiVersion: networking.istio.io/v1alpha3
-kind: DestinationRule
-metadata:
-  name: nginx-kind
-spec:
-  host: nginx-kind
-  subsets:
-  - name: v1
-    labels:
-      version: v1
-  - name: v2
-    labels:
-      version: v2
-`)
-
-		// Basic config with weight
-		apply(`
-apiVersion: networking.istio.io/v1alpha3
-kind: VirtualService
-metadata:
-  name: nginx-kind
-spec:
-  hosts:
-  - nginx-kind
-  http:
-  - name: route
-    route:
-    - destination:
-        host: nginx-kind
-        subset: v1
-      weight: 50
-    - destination:
-        host: nginx-kind
-        subset: v2
-      weight: 50
-`)
-		// Validate normal access
-		curlName := "curl"
-		f.CreateCurl(curlName)
-		f.WaitForCurlReady(curlName)
-
+		// validate access count
 		v1Counter := 0
 		v2Counter := 0
 		doRequest := func() {
-			output := f.CurlInPod(curlName, nginxService+"/status")
-			assert.Contains(ginkgo.GinkgoT(), output, "200 OK", "make sure it works properly")
-			assert.Contains(ginkgo.GinkgoT(), output, "Via: APISIX", "make sure it works properly")
+			output := tester.DoAccess(200, nil, nil, "nginx-kind/status")
 			if strings.Contains(output, "ngx-v1") {
 				v1Counter++
 			} else if strings.Contains(output, "ngx-v2") {
@@ -124,5 +53,6 @@ spec:
 
 		assert.NotEqual(ginkgo.GinkgoT(), 0, v1Counter, "check v1 accessed")
 		assert.NotEqual(ginkgo.GinkgoT(), 0, v2Counter, "check v2 accessed")
+		assert.Equal(ginkgo.GinkgoT(), 4, v1Counter+v2Counter, "check total accessed")
 	})
 })

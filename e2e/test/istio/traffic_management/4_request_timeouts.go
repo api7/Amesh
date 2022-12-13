@@ -15,6 +15,7 @@
 package traffic_management
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/onsi/ginkgo/v2"
@@ -25,39 +26,39 @@ import (
 
 var _ = ginkgo.Describe("[istio functions] Route Configuration:", func() {
 	f := framework.NewDefaultFramework()
-	utils.Case("should be able to inject fault: abort", func() {
+	utils.Case("should be able to config timeout", func() {
 		tester := NewVirtualServiceTester(f, []string{"v1"})
 
 		tester.Create()
 
-		// create fault routes
-		tester.AddRouteToWithAbortFault("nginx-kind", "v1", "User", "fault-abort")
-		tester.AddRouteTo("nginx-kind", "v1")
+		// Case 1, timeout
+		// apply routes
+		tester.AddRouteToWithDelayFault("httpbin-kind", "v1", "User", "fault-delay", 10)
+		tester.AddRouteTo("httpbin-kind", "v1")
+		tester.AddRouteToWithTimeout("nginx-kind", "v1", 5)
 		tester.ApplyRoute()
 
-		// validate
-		tester.ValidateAccessible("origin", "nginx-kind/ip")
-		// validate fault abort
-		tester.ValidateInaccessible(555, "origin", "nginx-kind/ip", "-H", "User: fault-abort")
-	})
-
-	utils.Case("should be able to inject fault: delay", func() {
-		tester := NewVirtualServiceTester(f, []string{"v1"})
-
-		tester.Create()
-
-		// create fault routes
-		tester.AddRouteToWithDelayFault("nginx-kind", "v1", "User", "fault-delay", 10)
-		tester.AddRouteTo("nginx-kind", "v1")
-		tester.ApplyRoute()
-
-		// validate duration < 10s
+		// validate access with timeout
 		tester.ValidateTimeout(0, time.Second*5, func() {
 			tester.ValidateAccessible("origin", "nginx-kind/ip")
 		})
+		// validate longer than 5s (toleration timeout) but shorter than 10s (actual service timeout)
+		tester.ValidateTimeout(time.Second*5, time.Second*8, func() {
+			tester.ValidateInaccessible(http.StatusGatewayTimeout, "origin", "nginx-kind/ip", "-H", "User: fault-delay")
+		})
 
-		// validate duration > 10s
-		tester.ValidateTimeout(time.Second*10, time.Second*14, func() {
+		// Case 2, tolerate timeout
+		// apply routes
+		tester.ClearRoute("nginx-kind")
+		tester.AddRouteToWithTimeout("nginx-kind", "v1", 12)
+		tester.ApplyRoute()
+
+		// validate accessible
+		tester.ValidateTimeout(0, time.Second*5, func() {
+			tester.ValidateAccessible("origin", "nginx-kind/ip")
+		})
+		// validate longer than 10s (actual service timeout) but shorter than 12s (toleration timeout)
+		tester.ValidateTimeout(time.Second*10, time.Second*12, func() {
 			tester.ValidateAccessible("origin", "nginx-kind/ip", "-H", "User: fault-delay")
 		})
 	})

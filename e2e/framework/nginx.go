@@ -140,6 +140,8 @@ type NginxArgs struct {
 }
 
 func (f *Framework) getNginxArgs(name string) *NginxArgs {
+	f.appArgsLock.RLock()
+	defer f.appArgsLock.RUnlock()
 	if args, ok := f.appArgs[name]; ok {
 		if nginxArgs, ok := args.(*NginxArgs); ok {
 			return nginxArgs
@@ -151,6 +153,12 @@ func (f *Framework) getNginxArgs(name string) *NginxArgs {
 	}
 
 	return nil
+}
+
+func (f *Framework) setNginxArgs(name string, args *NginxArgs) {
+	f.appArgsLock.Lock()
+	defer f.appArgsLock.Unlock()
+	f.appArgs[name] = args
 }
 
 func (f *Framework) CreateNginxOutsideMeshTo(svc string, waitReady bool, nameOpt ...string) string {
@@ -176,7 +184,7 @@ func (f *Framework) CreateUnavailableNginxInMeshTo(svc string, waitReady bool, n
 func (f *Framework) MakeNginxInsideMesh(name string, waitReady bool) {
 	args := f.getNginxArgs(name)
 	args.InMesh = true
-	f.appArgs[name] = args
+	f.setNginxArgs(name, args)
 
 	f.applyNginx(args, waitReady)
 }
@@ -184,7 +192,7 @@ func (f *Framework) MakeNginxInsideMesh(name string, waitReady bool) {
 func (f *Framework) MakeNginxOutsideMesh(name string, waitReady bool) {
 	args := f.getNginxArgs(name)
 	args.InMesh = false
-	f.appArgs[name] = args
+	f.setNginxArgs(name, args)
 
 	f.applyNginx(args, waitReady)
 }
@@ -215,38 +223,39 @@ func (f *Framework) MakeNginxAvailable(name string, waitReady bool) {
 func (f *Framework) ScaleNginx(name string, replicas int, waitReady bool) {
 	args := f.getNginxArgs(name)
 	args.Replicas = replicas
-	f.appArgs[name] = args
+	f.setNginxArgs(name, args)
 
 	f.applyNginx(args, waitReady)
 }
 
 func (f *Framework) createNginxTo(registry, svc string, inMesh bool, waitReady bool, nameOpt ...string) string {
-	randomName := fmt.Sprintf("ngx-%d", time.Now().Nanosecond())
+	name := fmt.Sprintf("ngx-%d", time.Now().Nanosecond())
 	if len(nameOpt) > 0 {
-		randomName = nameOpt[0]
+		name = nameOpt[0]
 	}
+	log.Infof("Creating NGINX " + name)
 
 	version := "v1"
-	if strings.HasSuffix(randomName, "-v2") {
+	if strings.HasSuffix(name, "-v2") {
 		version = "v2"
-	} else if strings.HasSuffix(randomName, "-v3") {
+	} else if strings.HasSuffix(name, "-v3") {
 		version = "v3"
 	}
 	args := &NginxArgs{
 		ManifestArgs: &ManifestArgs{
 			LocalRegistry: registry,
 		},
-		Name:          randomName,
-		ConfigMapName: randomName,
+		Name:          name,
+		ConfigMapName: name,
 		InMesh:        inMesh,
 		Version:       version,
 		Replicas:      1,
 		ProxyService:  svc,
 	}
-	f.appArgs[randomName] = args
+	f.setNginxArgs(name, args)
 	f.applyNginx(args, waitReady)
 
-	return randomName
+	return name
 }
 
 // applyNginx doesn't record the appArgs

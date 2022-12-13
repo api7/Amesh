@@ -101,6 +101,12 @@ type httpbinRenderArgs struct {
 }
 
 func (f *Framework) newHttpBin(name string, inMesh bool) {
+	str := "inside mesh"
+	if !inMesh {
+		str = "outside mesh"
+	}
+	log.Infof("Creating HTTPBIN " + str)
+
 	version := "v1"
 	if strings.HasSuffix(name, "-v2") {
 		version = "v2"
