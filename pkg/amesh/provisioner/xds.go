@@ -63,6 +63,9 @@ type xdsProvisioner struct {
 	evChan  chan []types.Event
 	resetCh chan error
 
+	edsLogLock sync.RWMutex
+	edsLog     map[string]time.Time
+
 	// route name -> addr
 	// find the listener (address) owner, an extra match
 	// condition will be patched to the APISIX route.
@@ -145,6 +148,8 @@ func NewXDSProvisioner(cfg *Config) (types.Provisioner, error) {
 		logger: logger,
 
 		syncInterval: cfg.SyncInternal,
+
+		edsLog: map[string]time.Time{},
 
 		sendCh:  make(chan *discoveryv3.DiscoveryRequest),
 		recvCh:  make(chan *discoveryv3.DiscoveryResponse),
@@ -779,11 +784,32 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) ([]strin
 }
 
 func (p *xdsProvisioner) sendEds(edsRequests util.StringSet) {
+	resources := edsRequests.Strings()
+	var filteredResources []string
+
+	now := time.Now()
+	p.edsLogLock.Lock()
+	for _, resource := range resources {
+		if t, ok := p.edsLog[resource]; ok && (now.Sub(t) < time.Second*10) {
+			// not allow retry
+			continue
+		} else {
+			p.edsLog[resource] = now
+			filteredResources = append(filteredResources, resource)
+		}
+	}
+	p.edsLogLock.Unlock()
+
+	p.logger.Debugw("filtered eds requests",
+		zap.Strings("request", resources),
+		zap.Strings("filtered", filteredResources),
+	)
+
 	// TODO: merge calls to reduce duplicate requests?
 	dr := &discoveryv3.DiscoveryRequest{
 		Node:          p.node,
 		TypeUrl:       types.ClusterLoadAssignmentUrl,
-		ResourceNames: edsRequests.Strings(),
+		ResourceNames: filteredResources,
 	}
 	p.logger.Debugw(color.CyanString("sending EDS discovery request"),
 		zap.Any("body", dr),
@@ -801,7 +827,7 @@ func (p *xdsProvisioner) sendRds(rdsNames []string) {
 		ResourceNames: rdsNames,
 	}
 	p.logger.Debugw(color.CyanString("sending RDS discovery request"),
-		zap.Any("body", dr),
+		zap.Any("resources", rdsNames),
 	)
 	p.sendCh <- dr
 }

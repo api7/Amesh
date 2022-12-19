@@ -46,3 +46,9 @@ type TrafficSplitRule struct {
 type TrafficSplit struct {
 	Rules []*TrafficSplitRule `json:"rules,omitempty"`
 }
+
+type ProxyMirror struct {
+	Host        string  `json:"host,omitempty"`
+	Path        string  `json:"path,omitempty"`
+	SampleRatio float32 `json:"sample_ratio,omitempty"`
+}

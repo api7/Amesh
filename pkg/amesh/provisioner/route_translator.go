@@ -80,6 +80,7 @@ func (p *xdsProvisioner) TranslateRouteConfiguration(r *routev3.RouteConfigurati
 	return routes, nil
 }
 
+// TODO: how to deal with partial failure and ACK response?
 func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.VirtualHost) ([]*apisix.Route, error) {
 	if routeName == "" {
 		routeName = "anon"
@@ -431,7 +432,7 @@ func patchRoutesWithOriginalDestination(routes []*apisix.Route, origDst string) 
 	//}
 }
 
-func (p *xdsProvisioner) convertPercentage(percent *typev3.FractionalPercent) uint32 {
+func (p *xdsProvisioner) convertPercent(percent *typev3.FractionalPercent) uint32 {
 	if percent == nil {
 		return 0
 	}
@@ -451,13 +452,13 @@ func (p *xdsProvisioner) convertPercentage(percent *typev3.FractionalPercent) ui
 	return percentage
 }
 
-func (p *xdsProvisioner) convertRuntimePercentage(percent *corev3.RuntimeFractionalPercent) uint32 {
+func (p *xdsProvisioner) convertRuntimePercent(percent *corev3.RuntimeFractionalPercent) uint32 {
 	if percent == nil {
 		return 0
 	}
 
 	v := percent.GetDefaultValue()
-	return p.convertPercentage(v)
+	return p.convertPercent(v)
 }
 
 func (p *xdsProvisioner) translateRouteFilters(xdsRoute *routev3.Route, apisixRoute *apisix.Route) error {
@@ -500,7 +501,7 @@ func (p *xdsProvisioner) translateRouteFilters(xdsRoute *routev3.Route, apisixRo
 						continue
 					}
 
-					faultPlugin.Abort.Percentage = p.convertPercentage(fault.Abort.Percentage)
+					faultPlugin.Abort.Percentage = p.convertPercent(fault.Abort.Percentage)
 				}
 
 				// delay
@@ -520,7 +521,7 @@ func (p *xdsProvisioner) translateRouteFilters(xdsRoute *routev3.Route, apisixRo
 						continue
 					}
 
-					faultPlugin.Delay.Percentage = p.convertPercentage(fault.Delay.Percentage)
+					faultPlugin.Delay.Percentage = p.convertPercent(fault.Delay.Percentage)
 				}
 
 				apisixRoute.Plugins["fault-injection"] = faultPlugin
@@ -553,10 +554,10 @@ func (p *xdsProvisioner) translateRoutePlugins(xdsRoute *routev3.Route, apisixRo
 		return err
 	}
 
-	err = p.translateRouteMirror(route, apisixRoute)
-	if err != nil {
-		return err
-	}
+	//err = p.translateRouteMirror(route, apisixRoute)
+	//if err != nil {
+	//	return err
+	//}
 
 	return nil
 }
@@ -602,9 +603,35 @@ func (p *xdsProvisioner) translateRouteMirror(route *routev3.RouteAction, apisix
 	// TODO: how proxy-mirror works with traffic-split?
 	mirror := mirrors[0]
 	cluster := mirror.Cluster
-	percentage := p.convertRuntimePercentage(mirror.RuntimeFraction)
+	percent := p.convertRuntimePercent(mirror.RuntimeFraction)
+	if percent <= 0 {
+		percent = 100 // defaults to 100%
+	}
+	percentage := float32(percent) / 100
 
-	_, _ = cluster, percentage
+	p.upstreamsLock.RLock()
+	upstream, ok := p.upstreams[cluster]
+	p.upstreamsLock.RUnlock()
+
+	if !ok || len(upstream.Nodes) == 0 {
+		// enqueue retry queue
+		apisixRoute.Plugins["proxy-mirror"] = &apisix.ProxyMirror{
+			Host:        id.GenID(cluster), // patched needed
+			Path:        "",                // leave empty
+			SampleRatio: percentage,
+		}
+
+		return nil
+	}
+
+	host := string(upstream.Scheme) + "://" + upstream.Nodes[0].Host
+
+	apisixRoute.Plugins["proxy-mirror"] = &apisix.ProxyMirror{
+		//Host:        host,
+		Host:        host,
+		Path:        "", // leave empty
+		SampleRatio: percentage,
+	}
 
 	return nil
 }

@@ -13,7 +13,11 @@
 // limitations under the License.
 package types
 
-import "errors"
+import (
+	"errors"
+
+	resourcev3 "github.com/envoyproxy/go-control-plane/pkg/resource/v3"
+)
 
 var (
 	ErrorRequireFurtherEDS = errors.New("require further eds")
@@ -21,13 +25,13 @@ var (
 
 var (
 	// RouteConfigurationUrl is the RDS type url.
-	RouteConfigurationUrl = "type.googleapis.com/envoy.config.route.v3.RouteConfiguration"
+	RouteConfigurationUrl = resourcev3.RouteType
 	// ClusterUrl is the Cluster type url.
-	ClusterUrl = "type.googleapis.com/envoy.config.cluster.v3.Cluster"
+	ClusterUrl = resourcev3.ClusterType
 	// ClusterLoadAssignmentUrl is the Cluster type url.
-	ClusterLoadAssignmentUrl = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment"
+	ClusterLoadAssignmentUrl = resourcev3.EndpointType
 	// ListenerUrl is the Listener type url.
-	ListenerUrl = "type.googleapis.com/envoy.config.listener.v3.Listener"
+	ListenerUrl = resourcev3.ListenerType
 )
 
 // Provisioner provisions config event.

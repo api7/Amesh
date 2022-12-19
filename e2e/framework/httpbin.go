@@ -54,6 +54,7 @@ spec:
       - name: httpbin
         image: {{ .LocalRegistry }}/kennethreitz/httpbin
         imagePullPolicy: IfNotPresent
+        command: ["gunicorn", "--access-logfile", "-", "-b", "0.0.0.0:80", "httpbin:app"]
         ports:
         - containerPort: 80
           protocol: TCP
