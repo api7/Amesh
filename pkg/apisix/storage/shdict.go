@@ -18,10 +18,11 @@
 package storage
 
 /*
-#cgo LDFLAGS: -shared
+#cgo LDFLAGS: -shared -ldl
+#include "xds.h"
 #include <stdlib.h>
 
-extern void ngx_http_lua_ffi_shdict_store(void *zone, int op,
+extern void ngx_lua_ffi_shdict_store(void *zone, int op,
     const unsigned char *key, size_t key_len,
 	int value_type,
     const unsigned char *str_value_buf, size_t str_value_len,
@@ -68,7 +69,7 @@ func (s *SharedDictStorage) Store(key, value string) {
 	errMsgBuf := make([]*C.char, 1)
 	var forcible = 0
 
-	C.ngx_http_lua_ffi_shdict_store(s.zone, 0x0004,
+	C.ngx_lua_ffi_shdict_store(s.zone, 0x0004,
 		(*C.uchar)(unsafe.Pointer(keyCStr)), keyLen,
 		4,
 		(*C.uchar)(unsafe.Pointer(valueCStr)), valueLen,
@@ -91,7 +92,7 @@ func (s *SharedDictStorage) Delete(key string) {
 	errMsgBuf := make([]*C.char, 1)
 	var forcible = 0
 
-	C.ngx_http_lua_ffi_shdict_store(s.zone, 0x0004,
+	C.ngx_lua_ffi_shdict_store(s.zone, 0x0004,
 		(*C.uchar)(unsafe.Pointer(keyCStr)), keyLen,
 		4,
 		nil, 0,
