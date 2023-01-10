@@ -459,10 +459,10 @@ func TestTranslateVirtualHostWithFilter(t *testing.T) {
 
 	assert.Equal(t, 0, len(routes[0].Plugins))
 	assert.Equal(t, 1, len(routes[1].Plugins))
-	assert.NotNil(t, routes[1].Plugins["fault-injection"].(*apisix.FaultInjection))
-	assert.NotNil(t, routes[1].Plugins["fault-injection"].(*apisix.FaultInjection).Abort)
-	assert.Equal(t, uint32(100), routes[1].Plugins["fault-injection"].(*apisix.FaultInjection).Abort.Percentage)
-	assert.Equal(t, uint32(555), routes[1].Plugins["fault-injection"].(*apisix.FaultInjection).Abort.HttpStatus)
+	assert.NotNil(t, routes[1].Plugins[apisix.PluginFaultInjection].(*apisix.FaultInjection))
+	assert.NotNil(t, routes[1].Plugins[apisix.PluginFaultInjection].(*apisix.FaultInjection).Abort)
+	assert.Equal(t, uint32(100), routes[1].Plugins[apisix.PluginFaultInjection].(*apisix.FaultInjection).Abort.Percentage)
+	assert.Equal(t, uint32(555), routes[1].Plugins[apisix.PluginFaultInjection].(*apisix.FaultInjection).Abort.HttpStatus)
 
 	routes[0].Id = ""
 	routes[1].Id = ""

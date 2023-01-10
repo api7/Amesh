@@ -524,7 +524,7 @@ func (p *xdsProvisioner) translateRouteFilters(xdsRoute *routev3.Route, apisixRo
 					faultPlugin.Delay.Percentage = p.convertPercent(fault.Delay.Percentage)
 				}
 
-				apisixRoute.Plugins["fault-injection"] = faultPlugin
+				apisixRoute.Plugins[apisix.PluginFaultInjection] = faultPlugin
 			} else {
 				p.logger.Warnw("unsupported HTTPFault version",
 					zap.String("typed_url", data.GetTypeUrl()),
@@ -584,7 +584,7 @@ func (p *xdsProvisioner) translateRouteWeightedClusters(route *routev3.RouteActi
 		}
 	}
 
-	apisixRoute.Plugins["traffic-split"] = &apisix.TrafficSplit{
+	apisixRoute.Plugins[apisix.PluginTrafficSplit] = &apisix.TrafficSplit{
 		Rules: []*apisix.TrafficSplitRule{
 			{
 				WeightedUpstreams: weighted,
@@ -615,7 +615,7 @@ func (p *xdsProvisioner) translateRouteMirror(route *routev3.RouteAction, apisix
 
 	if !ok || len(upstream.Nodes) == 0 {
 		// enqueue retry queue
-		apisixRoute.Plugins["proxy-mirror"] = &apisix.ProxyMirror{
+		apisixRoute.Plugins[apisix.PluginProxyMirror] = &apisix.ProxyMirror{
 			Host:        id.GenID(cluster), // patched needed
 			Path:        "",                // leave empty
 			SampleRatio: percentage,
@@ -626,7 +626,7 @@ func (p *xdsProvisioner) translateRouteMirror(route *routev3.RouteAction, apisix
 
 	host := string(upstream.Scheme) + "://" + upstream.Nodes[0].Host
 
-	apisixRoute.Plugins["proxy-mirror"] = &apisix.ProxyMirror{
+	apisixRoute.Plugins[apisix.PluginProxyMirror] = &apisix.ProxyMirror{
 		//Host:        host,
 		Host:        host,
 		Path:        "", // leave empty

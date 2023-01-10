@@ -32,6 +32,7 @@ var (
 	ClusterLoadAssignmentUrl = resourcev3.EndpointType
 	// ListenerUrl is the Listener type url.
 	ListenerUrl = resourcev3.ListenerType
+	SecretUrl   = resourcev3.SecretType
 )
 
 // Provisioner provisions config event.
@@ -43,6 +44,7 @@ type Provisioner interface {
 	Run(<-chan struct{}) error
 	// GetData returns the specific data for status server
 	GetData(dataType string) (string, error)
+	SendSds(name string)
 }
 
 // EventType is the kind of event.
@@ -91,4 +93,11 @@ type ApisixPlugin struct {
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
 	// The plugin config
 	Config map[string]interface{} `json:"config,omitempty" yaml:"config,omitempty"`
+}
+
+type Secret struct {
+	Name        string
+	Certificate string
+	PrivateKey  string
+	TrustedCA   string
 }

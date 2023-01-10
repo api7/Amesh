@@ -14,6 +14,13 @@
 
 package apisix
 
+const (
+	PluginFaultInjection = "fault-injection"
+	PluginProxyMirror    = "proxy-mirror"
+	PluginTrafficSplit   = "traffic-split"
+	PluginPrometheus     = "prometheus"
+)
+
 type FaultInjectionAbort struct {
 	HttpStatus uint32 `json:"http_status,omitempty"`
 	Body       string `json:"body,omitempty"`
@@ -51,4 +58,9 @@ type ProxyMirror struct {
 	Host        string  `json:"host,omitempty"`
 	Path        string  `json:"path,omitempty"`
 	SampleRatio float32 `json:"sample_ratio,omitempty"`
+}
+
+type Prometheus struct {
+	// When set to true, would print route/service name instead of id in Prometheus metric.
+	PreferName bool `json:"prefer_name,omitempty"`
 }

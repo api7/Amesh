@@ -186,6 +186,15 @@ func (g *Agent) Run(stop <-chan struct{}) error {
 		http.HandleFunc("/routes", g.internalDataHandler("routes"))
 		http.HandleFunc("/upstreams", g.internalDataHandler("upstreams"))
 		http.HandleFunc("/plugins", g.internalDataHandler("plugins"))
+		http.HandleFunc("/sds/", func(writer http.ResponseWriter, request *http.Request) {
+			name := strings.TrimPrefix(request.URL.Path, "/sds/")
+			if name != "" {
+				g.provisioner.SendSds(name)
+			}
+
+			writer.WriteHeader(http.StatusOK)
+			writer.Write([]byte("Sending SDS: " + name))
+		})
 
 		err = http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
 		if err != nil {

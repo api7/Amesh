@@ -28,7 +28,9 @@ import (
 	endpointv3 "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
 	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
+	tlsv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	discoveryv3 "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	secretv3 "github.com/envoyproxy/go-control-plane/envoy/service/secret/v3"
 	"github.com/fatih/color"
 	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/rpc/code"
@@ -85,13 +87,17 @@ type xdsProvisioner struct {
 	// clusterName -> ApisixUpstream
 	upstreams map[string]*apisix.Upstream
 
+	secretsLock sync.RWMutex
+	secrets     map[string]*types.Secret
+
 	edsRequestLock sync.RWMutex
 	// this map enrolls all clusters that require further EDS requests.
 	edsRequiredClusters util.StringSet
 
 	// TODO: emit events and change reconnect e2e
-	connected bool
-	ready     bool
+	adsConnected bool
+	sdsConnected bool
+	ready        bool
 }
 
 type XdsProvisionerStatus struct {
@@ -99,6 +105,7 @@ type XdsProvisionerStatus struct {
 	XdsProvisionerReady   bool `json:"xdsProvisionerReady"`
 	AmeshConnected        bool `json:"ameshConnected"`
 	AmeshProvisionerReady bool `json:"ameshProvisionerReady"`
+	SdsConnected          bool `json:"sdsConnected"`
 }
 
 type Config struct {
@@ -140,6 +147,9 @@ func NewXDSProvisioner(cfg *Config) (types.Provisioner, error) {
 	node := &corev3.Node{
 		Id:            xds.GenNodeId(cfg.RunId, cfg.IpAddress, dnsDomain),
 		UserAgentName: fmt.Sprintf("amesh/%s", version.Short()),
+		// TODO: add cluster and metadata
+		//Cluster:,
+		//Metadata:,
 	}
 
 	p := &xdsProvisioner{
@@ -176,10 +186,11 @@ func (p *xdsProvisioner) GetData(dataType string) (string, error) {
 	switch dataType {
 	case "status":
 		str, err := json.MarshalIndent(&XdsProvisionerStatus{
-			XdsConnected:          p.connected,
+			XdsConnected:          p.adsConnected,
 			XdsProvisionerReady:   p.ready,
 			AmeshConnected:        p.amesh.connected,
 			AmeshProvisionerReady: p.amesh.ready,
+			SdsConnected:          p.sdsConnected,
 		}, "", "  ")
 		return string(str), err
 	case "routes":
@@ -242,9 +253,11 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 	}
 
 	for {
+		ctx, cancel := context.WithCancel(context.Background())
+
 		p.logger.Info("try connect xds")
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		conn, err := grpc.DialContext(ctx, p.src,
+		xdsCtx, _ := context.WithTimeout(ctx, time.Second*10)
+		xdsConn, err := grpc.DialContext(xdsCtx, p.src,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
 		)
@@ -257,14 +270,12 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 			time.Sleep(time.Second * 5)
 			continue
 		}
-		p.connected = true
+		p.adsConnected = true
 		p.logger.Info("xds connected")
 
-		clientCtx, clientCancel := context.WithCancel(context.Background())
-		client, err := discoveryv3.NewAggregatedDiscoveryServiceClient(conn).StreamAggregatedResources(clientCtx)
+		client, err := discoveryv3.NewAggregatedDiscoveryServiceClient(xdsConn).StreamAggregatedResources(ctx)
 		if err != nil {
 			cancel()
-			clientCancel()
 
 			// TODO: retry create client without reconnect xds?
 			p.logger.Errorw("failed to create ads client",
@@ -275,17 +286,55 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 			continue
 		}
 
+		// TODO: FIXME: get uri from cluster
+		sdsUri := "unix:/etc/istio/proxy/SDS"
+		sdsCtx, _ := context.WithTimeout(ctx, time.Second*10)
+		sdsConn, err := grpc.DialContext(sdsCtx, sdsUri,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err != nil {
+			cancel()
+
+			p.logger.Errorw("failed to conn sds source",
+				zap.Error(err),
+				zap.String("sds_source", sdsUri),
+			)
+			time.Sleep(time.Second * 5)
+			continue
+		}
+		p.sdsConnected = true
+		p.logger.Info("sds connected")
+
+		sdsClient := secretv3.NewSecretDiscoveryServiceClient(sdsConn)
+		sdsStreamClient, err := sdsClient.StreamSecrets(ctx)
+		if err != nil {
+			cancel()
+
+			// TODO: retry create client without reconnect xds?
+			p.logger.Errorw("failed to create sds client",
+				zap.Error(err),
+				zap.String("sds_source", sdsUri),
+			)
+			time.Sleep(time.Second * 5)
+			continue
+		}
+
 		cleanup := func() {
 			cancel()
-			clientCancel()
-			if err := conn.Close(); err != nil {
+			if err := xdsConn.Close(); err != nil {
 				p.logger.Errorw("failed to close gRPC connection to XDS config source",
 					zap.Error(err),
 					zap.String("src", p.src),
 				)
 			}
+			if err := sdsConn.Close(); err != nil {
+				p.logger.Errorw("failed to close gRPC connection to SDS config source",
+					zap.Error(err),
+					zap.String("src", sdsUri),
+				)
+			}
 		}
-		if err := p.run(stop, client); err != nil {
+		if err := p.run(stop, client, sdsStreamClient); err != nil {
 			p.ready = false
 			cleanup()
 			p.logger.Errorw("failed to run provisioner",
@@ -300,7 +349,8 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 			cleanup()
 			return nil
 		case err = <-p.resetCh:
-			p.connected = false
+			p.adsConnected = false
+			p.sdsConnected = false // TODO: FIXME Split client impl
 			p.logger.Errorw("xds grpc client reset, closing",
 				zap.Error(err),
 			)
@@ -313,7 +363,9 @@ func (p *xdsProvisioner) Run(stop <-chan struct{}) error {
 	}
 }
 
-func (p *xdsProvisioner) run(stop <-chan struct{}, client discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient) error {
+func (p *xdsProvisioner) run(stop <-chan struct{},
+	adsClient discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient,
+	sdsClient secretv3.SecretDiscoveryService_StreamSecretsClient) error {
 	go func() {
 		for {
 			select {
@@ -325,8 +377,9 @@ func (p *xdsProvisioner) run(stop <-chan struct{}, client discoveryv3.Aggregated
 			}
 		}
 	}()
-	go p.sendLoop(stop, client)
-	go p.recvLoop(stop, client)
+	go p.sendLoop(stop, adsClient, sdsClient)
+	go p.recvLoop(stop, adsClient)
+	go p.sdsRecvLoop(stop, sdsClient)
 	go p.translateLoop(stop)
 	go p.firstSend()
 
@@ -387,7 +440,9 @@ func (p *xdsProvisioner) firstSend() {
 // sendLoop receives pending DiscoveryRequest objects and sends them to client.
 // Send operation will be retried continuously until successful or the context is
 // cancelled.
-func (p *xdsProvisioner) sendLoop(stop <-chan struct{}, client discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient) {
+func (p *xdsProvisioner) sendLoop(stop <-chan struct{},
+	adsClient discoveryv3.AggregatedDiscoveryService_StreamAggregatedResourcesClient,
+	sdsClient secretv3.SecretDiscoveryService_StreamSecretsClient) {
 	for {
 		select {
 		case <-stop:
@@ -397,15 +452,27 @@ func (p *xdsProvisioner) sendLoop(stop <-chan struct{}, client discoveryv3.Aggre
 				zap.String("type", dr.TypeUrl),
 				zap.Any("body", dr),
 			)
-			go func(dr *discoveryv3.DiscoveryRequest) {
-				if err := client.Send(dr); err != nil {
-					p.logger.Errorw("failed to send discovery request",
-						zap.Error(err),
-						zap.String("xds_source", p.src),
-					)
-					// TODO: FIXME: Retry
-				}
-			}(dr)
+			switch dr.TypeUrl {
+			case types.SecretUrl:
+				go func(dr *discoveryv3.DiscoveryRequest) {
+					if err := sdsClient.Send(dr); err != nil {
+						p.logger.Errorw("failed to send SDS discovery request",
+							zap.Error(err),
+						)
+						// TODO: FIXME: Retry
+					}
+				}(dr)
+			default:
+				go func(dr *discoveryv3.DiscoveryRequest) {
+					if err := adsClient.Send(dr); err != nil {
+						p.logger.Errorw("failed to send ADS discovery request",
+							zap.Error(err),
+							zap.String("xds_source", p.src),
+						)
+						// TODO: FIXME: Retry
+					}
+				}(dr)
+			}
 		}
 	}
 }
@@ -420,7 +487,7 @@ func (p *xdsProvisioner) recvLoop(stop <-chan struct{}, client discoveryv3.Aggre
 			case <-stop:
 				return
 			default:
-				p.connected = false
+				p.adsConnected = false
 				p.logger.Errorw("failed to receive discovery response",
 					zap.Error(err),
 				)
@@ -429,6 +496,46 @@ func (p *xdsProvisioner) recvLoop(stop <-chan struct{}, client discoveryv3.Aggre
 					strings.Contains(errMsg, "DeadlineExceeded") ||
 					strings.Contains(errMsg, "EOF") {
 					p.logger.Errorw("trigger xds grpc client reset",
+						zap.Error(err),
+					)
+					p.resetCh <- err
+					return
+				}
+				continue
+			}
+		}
+		//p.logger.Debugw("got discovery response",
+		//	zap.String("type", dr.TypeUrl),
+		//	zap.Any("body", dr),
+		//)
+		go func(dr *discoveryv3.DiscoveryResponse) {
+			select {
+			case <-stop:
+			case p.recvCh <- dr:
+			}
+		}(dr)
+	}
+}
+
+// recvLoop receives DiscoveryResponse objects from the wire stream and sends them
+// to the recvCh channel.
+func (p *xdsProvisioner) sdsRecvLoop(stop <-chan struct{}, client secretv3.SecretDiscoveryService_StreamSecretsClient) {
+	for {
+		dr, err := client.Recv()
+		if err != nil {
+			select {
+			case <-stop:
+				return
+			default:
+				p.sdsConnected = false
+				p.logger.Errorw("failed to receive secret response",
+					zap.Error(err),
+				)
+				errMsg := err.Error()
+				if strings.Contains(errMsg, "transport is closing") ||
+					strings.Contains(errMsg, "DeadlineExceeded") ||
+					strings.Contains(errMsg, "EOF") {
+					p.logger.Errorw("trigger sds grpc client reset",
 						zap.Error(err),
 					)
 					p.resetCh <- err
@@ -463,6 +570,7 @@ func (p *xdsProvisioner) translateLoop(stop <-chan struct{}) {
 				Node:          p.node,
 				TypeUrl:       resp.TypeUrl,
 				ResponseNonce: resp.Nonce,
+				VersionInfo:   resp.VersionInfo,
 			}
 
 			resourceNames, err := p.translate(resp)
@@ -646,7 +754,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) ([]strin
 
 		// We don't have any cache-invalidate mechanics yet, so shouldn't check it
 		//if !p.edsRequiredClusters.Equals(oldEdsRequiredClusters) {
-		p.logger.Infow("new EDS discovery request",
+		p.logger.Infow(color.CyanString("new EDS discovery request due to cluster"),
 			zap.Any("old_eds_required_clusters", oldEdsRequiredClusters),
 			zap.Any("eds_required_clusters", p.edsRequiredClusters),
 		)
@@ -700,7 +808,7 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) ([]strin
 
 		// TODO: FIXME: this could happen when the service is dangling without pods
 		if len(requireFurtherEds) > 0 {
-			p.logger.Infow("empty endpoint, new EDS discovery request",
+			p.logger.Infow(color.CyanString("empty endpoint, new EDS discovery request"),
 				zap.Any("eds_required_clusters", requireFurtherEds),
 			)
 			go p.sendEds(requireFurtherEds)
@@ -755,6 +863,32 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) ([]strin
 		p.staticRouteConfigurations = staticConfigs
 		p.routeOwnership = routeOwnership
 		go p.sendRds(rdsNames)
+	case types.SecretUrl:
+		p.secretsLock.Lock()
+		defer p.secretsLock.Unlock()
+		for _, res := range resp.Resources {
+			var secret tlsv3.Secret
+			if err := anypb.UnmarshalTo(res, &secret, proto.UnmarshalOptions{}); err != nil {
+				p.logger.Errorw("failed to unmarshal secret",
+					zap.Error(err),
+					zap.Any("response", res),
+				)
+				continue
+			}
+
+			s := &types.Secret{}
+			switch v := (secret.Type).(type) {
+			case *tlsv3.Secret_ValidationContext:
+				s.TrustedCA = string(v.ValidationContext.TrustedCa.GetInlineBytes())
+			case *tlsv3.Secret_TlsCertificate:
+				s.Certificate = string(v.TlsCertificate.CertificateChain.GetInlineBytes())
+				s.PrivateKey = string(v.TlsCertificate.PrivateKey.GetInlineBytes())
+
+			}
+			p.secrets[secret.Name] = s
+
+			resourceNames = append(resourceNames, secret.Name)
+		}
 	default:
 		p.logger.Debugw("got unsupported discovery response type",
 			zap.String("type", resp.TypeUrl),
@@ -785,31 +919,33 @@ func (p *xdsProvisioner) translate(resp *discoveryv3.DiscoveryResponse) ([]strin
 
 func (p *xdsProvisioner) sendEds(edsRequests util.StringSet) {
 	resources := edsRequests.Strings()
-	var filteredResources []string
-
-	now := time.Now()
-	p.edsLogLock.Lock()
-	for _, resource := range resources {
-		if t, ok := p.edsLog[resource]; ok && (now.Sub(t) < time.Second*10) {
-			// not allow retry
-			continue
-		} else {
-			p.edsLog[resource] = now
-			filteredResources = append(filteredResources, resource)
-		}
-	}
-	p.edsLogLock.Unlock()
-
-	p.logger.Debugw("filtered eds requests",
-		zap.Strings("request", resources),
-		zap.Strings("filtered", filteredResources),
-	)
+	//var filteredResources []string
+	//
+	//now := time.Now()
+	//p.edsLogLock.Lock()
+	//for _, resource := range resources {
+	//	if t, ok := p.edsLog[resource]; ok && (now.Sub(t) < time.Second*10) {
+	//		// not allow retry
+	//		continue
+	//	} else {
+	//		p.edsLog[resource] = now
+	//		filteredResources = append(filteredResources, resource)
+	//	}
+	//}
+	//p.edsLogLock.Unlock()
+	//
+	//// TODO: FIXME: this will filtered non-endpoint requests
+	//p.logger.Debugw("filtered eds requests",
+	//	zap.Strings("request", resources),
+	//	zap.Strings("filtered", filteredResources),
+	//)
 
 	// TODO: merge calls to reduce duplicate requests?
 	dr := &discoveryv3.DiscoveryRequest{
-		Node:          p.node,
-		TypeUrl:       types.ClusterLoadAssignmentUrl,
-		ResourceNames: filteredResources,
+		Node:    p.node,
+		TypeUrl: types.ClusterLoadAssignmentUrl,
+		//ResourceNames: filteredResources,
+		ResourceNames: resources,
 	}
 	p.logger.Debugw(color.CyanString("sending EDS discovery request"),
 		zap.Any("body", dr),
@@ -828,6 +964,18 @@ func (p *xdsProvisioner) sendRds(rdsNames []string) {
 	}
 	p.logger.Debugw(color.CyanString("sending RDS discovery request"),
 		zap.Any("resources", rdsNames),
+	)
+	p.sendCh <- dr
+}
+
+func (p *xdsProvisioner) SendSds(name string) {
+	dr := &discoveryv3.DiscoveryRequest{
+		Node:          p.node,
+		TypeUrl:       types.SecretUrl,
+		ResourceNames: []string{name},
+	}
+	p.logger.Debugw(color.CyanString("sending SDS discovery request"),
+		zap.Any("resources", name),
 	)
 	p.sendCh <- dr
 }

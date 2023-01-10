@@ -30,8 +30,15 @@ COPY pkg/ pkg/
 RUN if [ "$ENABLE_PROXY" = "true" ]; then go env -w GOPROXY=https://goproxy.cn,direct ; fi \
     && make build-amesh-so
 
+FROM istio/proxyv2:1.13.1 as istio-proxyv2
+
 FROM amesh-apisix:dev
 
-WORKDIR /usr/local/apisix
-COPY Dockerfiles/config.yaml conf/config.yaml
-COPY --from=amesh-sidecar-build-stage /amesh/bin/libxds.so libxds.so
+WORKDIR /
+COPY --from=istio-proxyv2 /usr/local/bin/pilot-agent /usr/local/bin/pilot-agent
+COPY --from=istio-proxyv2 /var/lib/istio/envoy/envoy_bootstrap_tmpl.json /var/lib/istio/envoy/envoy_bootstrap_tmpl.json
+COPY --from=istio-proxyv2 /var/lib/istio/envoy/gcp_envoy_bootstrap_tmpl.json /var/lib/istio/envoy/gcp_envoy_bootstrap_tmpl.json
+COPY Dockerfiles/entry.sh /usr/local/bin/envoy
+
+COPY Dockerfiles/config.yaml /usr/local/apisix/conf/config.yaml
+COPY --from=amesh-sidecar-build-stage /amesh/bin/libxds.so /usr/local/apisix/libxds.so
