@@ -450,12 +450,12 @@ plugin_attr:
       inactive_timeout: 1
       max_export_batch_size: 16
   prometheus:
-    export_uri: /apisix/prometheus/metrics
+    export_uri: /stats/prometheus
     metric_prefix: apisix_
     enable_export_server: true
     export_addr:
       ip: 127.0.0.1
-      port: 9091
+      port: 15090
   server-info:
     report_ttl: 60   # live time for server info in etcd (unit: second)
   dubbo-proxy:
