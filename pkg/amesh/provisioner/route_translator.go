@@ -224,6 +224,10 @@ func (p *xdsProvisioner) translateVirtualHost(routeName string, vhost *routev3.V
 			continue
 		}
 
+		r.Plugins[apisix.PluginPrometheus] = &apisix.Prometheus{
+			PreferName: true,
+		}
+
 		err = p.translateRoutePlugins(route, r)
 		if err != nil {
 			errors = multierror.Append(err)

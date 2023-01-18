@@ -129,6 +129,9 @@ istiod:
               - containerPort: 19081
                 protocol: TCP
                 name: http-inbound
+              - containerPort: 15020
+                protocol: TCP
+                name: prom
             env:
             - name: STATUS_SERVER_PORT
               value: "9999"
