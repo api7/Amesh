@@ -24,9 +24,10 @@ import (
 // TranslateCluster generates ApisixUpstream from Cluster
 func (p *xdsProvisioner) TranslateCluster(c *clusterv3.Cluster) (*apisix.Upstream, error) {
 	ups := &apisix.Upstream{
-		Name:  c.Name,
-		Id:    id.GenID(c.Name),
-		Nodes: []*apisix.Node{},
+		Name:   c.Name,
+		Id:     id.GenID(c.Name),
+		Nodes:  []*apisix.Node{},
+		Scheme: apisix.ProtocolSchemeHttp, // TODO: support more
 	}
 	if err := p.translateClusterLbPolicy(c, ups); err != nil {
 		return nil, err

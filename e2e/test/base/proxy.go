@@ -31,7 +31,6 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 
 	utils.Case("outside mesh should be able to access inside mesh", func() {
 		// Outside NGINX -> Inside HTTPBIN
-
 		ngxName := ""
 
 		utils.ParallelRunAndWait(func() {
@@ -67,7 +66,7 @@ var _ = ginkgo.Describe("[basic proxy functions]", func() {
 			ngxName = f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN(), true)
 			f.WaitForNginxReady(ngxName)
 		})
-		time.Sleep(time.Second * 3)
+		time.Sleep(time.Second * 6)
 
 		client, _ := f.NewHTTPClientToNginx(ngxName)
 		resp := client.GET("/ip").WithHeader("Host", f.GetHttpBinServiceFQDN()).Expect()

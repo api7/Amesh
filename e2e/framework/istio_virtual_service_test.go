@@ -64,6 +64,10 @@ func TestVirtualServiceManifest(t *testing.T) {
 						Weight: 50,
 					},
 				},
+				Mirror: &RouteMirrorRule{
+					Host:   "mirror-backend",
+					Subset: "v1",
+				},
 			},
 			{
 				Match: &RouteMatchRule{},
@@ -145,6 +149,11 @@ spec:
         host: nginx-kind
         subset: v2
       weight: 50
+    mirror:
+      host: mirror-backend
+      subset: v1
+    mirrorPercentage:
+      value: 100.0
   - name: route-3
     route:
     - destination:

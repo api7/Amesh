@@ -27,11 +27,17 @@ type RouteDestinationConfig struct {
 	Weight int
 }
 
+type RouteMirrorRule struct {
+	Host   string
+	Subset string
+}
+
 type RouteConfig struct {
 	Match        *RouteMatchRule
 	Fault        *RouteFaultRule
 	Destinations map[string]*RouteDestinationConfig
 	Timeout      float32
+	Mirror       *RouteMirrorRule
 }
 
 type VirtualServiceConfig struct {
@@ -104,6 +110,14 @@ spec:
         percentage:
           value: {{ $routeConfig.Fault.Delay.Percentage }}
 {{- end }}
+{{- end }}
+
+{{- if $routeConfig.Mirror }}
+    mirror:
+      host: {{ $routeConfig.Mirror.Host }}
+      subset: {{ $routeConfig.Mirror.Subset }}
+    mirrorPercentage:
+      value: 100.0
 {{- end }}
 
 {{- end }}

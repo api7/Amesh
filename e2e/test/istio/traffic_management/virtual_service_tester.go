@@ -20,14 +20,22 @@ type VirtualServiceTester struct {
 	// Valid versions is: v1, v2, v3
 	Versions []string
 
-	curlName string
+	needNginx bool
+	curlName  string
 }
 
-func NewVirtualServiceTester(f *framework.Framework, versions []string) *VirtualServiceTester {
+// opts: needNginx
+func NewVirtualServiceTester(f *framework.Framework, versions []string, opts ...bool) *VirtualServiceTester {
+	needNgx := true
+	if len(opts) > 0 {
+		needNgx = opts[0]
+	}
 	return &VirtualServiceTester{
 		f:        f,
 		Configs:  map[string]*framework.VirtualServiceConfig{},
 		Versions: versions,
+
+		needNginx: needNgx,
 	}
 }
 
@@ -47,10 +55,14 @@ func (t *VirtualServiceTester) Create() {
 			httpbin := "httpbin-" + version
 			ngx := "ngx-" + version
 			f.CreateHttpbinInMesh(httpbin)
-			f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN("httpbin-kind"), true, ngx)
+			if t.needNginx {
+				f.CreateNginxInMeshTo(f.GetHttpBinServiceFQDN("httpbin-kind"), true, ngx)
+			}
 
 			f.WaitForHttpbinReady(httpbin)
-			f.WaitForNginxReady(ngx)
+			if t.needNginx {
+				f.WaitForNginxReady(ngx)
+			}
 		})
 	}
 
@@ -173,7 +185,7 @@ func (t *VirtualServiceTester) AddRouteToWithAbortFault(host string, dest, heade
 	})
 }
 
-func (t *VirtualServiceTester) AddRouteToWithDelayFault(host string, dest, header, value string, timeout float32) {
+func (t *VirtualServiceTester) AddRouteToWithDelayFault(host, dest string, header, value string, timeout float32) {
 	if _, ok := t.Configs[host]; !ok {
 		t.Configs[host] = &framework.VirtualServiceConfig{
 			Host:         host,
@@ -198,6 +210,27 @@ func (t *VirtualServiceTester) AddRouteToWithDelayFault(host string, dest, heade
 			dest: {
 				Weight: 100,
 			},
+		},
+	})
+}
+
+func (t *VirtualServiceTester) AddRouteToWithMirror(host, dest string, mirrorDest, mirrorSubset string) {
+	if _, ok := t.Configs[host]; !ok {
+		t.Configs[host] = &framework.VirtualServiceConfig{
+			Host:         host,
+			Destinations: t.Versions,
+			Routes:       nil,
+		}
+	}
+	t.Configs[host].Routes = append(t.Configs[host].Routes, &framework.RouteConfig{
+		Destinations: map[string]*framework.RouteDestinationConfig{
+			dest: {
+				Weight: 100,
+			},
+		},
+		Mirror: &framework.RouteMirrorRule{
+			Host:   mirrorDest,
+			Subset: mirrorSubset,
 		},
 	})
 }
