@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"github.com/api7/amesh/controller/pkg/metrics"
 	"os"
 	"time"
 
@@ -131,8 +132,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Others
-	grpc, err := pkg.NewGRPCController(":15810", ameshPluginConfigController)
+	// Metrics
+	collector := metrics.NewPrometheusCollector()
+
+	// GRPC Server
+	grpc, err := pkg.NewGRPCController(":15810", ameshPluginConfigController, collector)
 	if err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GRPC")
 		os.Exit(1)
@@ -144,6 +148,7 @@ func main() {
 	kubeInformerFactory.Start(ctx.Done())
 	ameshInformerFactory.Start(ctx.Done())
 	go grpc.Run(ctx.Done())
+	go collector.Run(ctx.Done())
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {

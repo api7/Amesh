@@ -14,7 +14,11 @@
 
 package pkg
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/api7/amesh/controller/pkg/metrics"
+)
 
 type ProxyInstance struct {
 	UpdateNotifyChan chan struct{}
@@ -24,11 +28,13 @@ type ProxyInstance struct {
 type InstanceManager struct {
 	lock      sync.RWMutex
 	instances map[string]*ProxyInstance
+	collector metrics.Collector
 }
 
-func NewInstanceManager() *InstanceManager {
+func NewInstanceManager(collector metrics.Collector) *InstanceManager {
 	return &InstanceManager{
 		instances: map[string]*ProxyInstance{},
+		collector: collector,
 	}
 }
 
@@ -47,12 +53,14 @@ func (m *InstanceManager) add(key string, instance *ProxyInstance) {
 	m.lock.Lock()
 	m.instances[key] = instance
 	m.lock.Unlock()
+	m.collector.IncManagedInstances()
 }
 
 func (m *InstanceManager) delete(key string) {
 	m.lock.Lock()
 	delete(m.instances, key)
 	m.lock.Unlock()
+	m.collector.DecManagedInstances()
 }
 
 func (m *InstanceManager) foreach(fn func(*ProxyInstance)) {

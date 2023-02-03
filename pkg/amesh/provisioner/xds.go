@@ -501,7 +501,11 @@ func (p *xdsProvisioner) recvLoop(stop <-chan struct{}, client discoveryv3.Aggre
 					p.resetCh <- err
 					return
 				}
-				continue
+
+				p.logger.Errorw("unhandled xds grpc client error",
+					zap.Error(err),
+				)
+				p.resetCh <- err
 			}
 		}
 		//p.logger.Debugw("got discovery response",
@@ -527,6 +531,7 @@ func (p *xdsProvisioner) sdsRecvLoop(stop <-chan struct{}, client secretv3.Secre
 			case <-stop:
 				return
 			default:
+				// TODO: FIXME: after a while (hours?), the sds connection MAY lost, check why
 				p.sdsConnected = false
 				p.logger.Errorw("failed to receive secret response",
 					zap.Error(err),
@@ -541,7 +546,11 @@ func (p *xdsProvisioner) sdsRecvLoop(stop <-chan struct{}, client secretv3.Secre
 					p.resetCh <- err
 					return
 				}
-				continue
+				p.logger.Errorw("unhandled sds grpc client error",
+					zap.Error(err),
+				)
+				p.resetCh <- err
+				return
 			}
 		}
 		//p.logger.Debugw("got discovery response",

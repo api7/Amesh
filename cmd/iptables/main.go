@@ -167,6 +167,8 @@ func (ic *iptablesConstructor) insertOutboundRules() {
 func (ic *iptablesConstructor) insertSkipRules() {
 	ic.iptables.AppendRuleV4(log.UndefinedCommand, OutputChain, "nat", "-o", "lo", "!", "-d",
 		"127.0.0.1/32", "-m", "owner", "--uid-owner", ic.cfg.ProxyUID, "-j", "RETURN")
+	ic.iptables.AppendRuleV4(log.UndefinedCommand, OutputChain, "nat", "-d",
+		"127.0.0.1/32", "-j", "RETURN")
 	ic.iptables.AppendRuleV4(log.UndefinedCommand, OutputChain, "nat", "-m", "owner", "--gid-owner",
 		ic.cfg.ProxyGID, "-j", "RETURN")
 }
