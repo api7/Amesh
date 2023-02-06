@@ -506,6 +506,7 @@ func (p *xdsProvisioner) recvLoop(stop <-chan struct{}, client discoveryv3.Aggre
 					zap.Error(err),
 				)
 				p.resetCh <- err
+				return
 			}
 		}
 		//p.logger.Debugw("got discovery response",

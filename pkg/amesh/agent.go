@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io"
 	"net"
 	"net/http"
@@ -32,6 +31,7 @@ import (
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/fatih/color"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
 	"github.com/api7/amesh/pkg/amesh/provisioner"
