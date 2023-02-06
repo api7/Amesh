@@ -53,6 +53,7 @@ ifeq ($(ENABLE_PROXY), true)
 else
 	docker build -f Dockerfiles/iptables.Dockerfile -t $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) .
 endif
+	docker tag $(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG) $(REGISTRY)/$(AMESH_IPTABLES_IMAGE):$(AMESH_IPTABLES_IMAGE_TAG)
 else
 	# reuse pre-built image
 	docker pull api7/amesh-iptables:v0.0.2
@@ -90,6 +91,7 @@ build-amesh-sidecar-image:
 	docker build --build-arg ENABLE_PROXY=$(ENABLE_PROXY) \
 		-f Dockerfiles/amesh-sidecar.Dockerfile \
 		-t $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) .
+	docker tag $(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG) $(REGISTRY)/$(AMESH_SIDECAR_IMAGE):$(AMESH_SIDECAR_IMAGE_TAG)
 
 .PHONY: build-amesh-controller-image
 build-amesh-controller-image:

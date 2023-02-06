@@ -26,22 +26,11 @@ spec:
         - name: httpbin
           image: kennethreitz/httpbin
           imagePullPolicy: IfNotPresent
-          command:
-            - /usr/bin/python3
-          args:
-            - /usr/local/bin/gunicorn
-            - "-b"
-            - "0.0.0.0:80"
-            - "httpbin:app"
-            - "-k"
-            - "gevent"
-            - "--log-level"
-            - "debug"
+          command: ["gunicorn", "--access-logfile", "-", "-b", "0.0.0.0:80", "httpbin:app"]
           ports:
-            - containerPort: 9080
-          env:
-            - name: DEBUG
-              value: "True"
+            - containerPort: 80
+              protocol: TCP
+              name: http
 ---
 apiVersion: v1
 kind: Service
@@ -50,8 +39,10 @@ metadata:
     app: httpbin
   name: httpbin
 spec:
-  ports:
-    - port: 9080
-      name: http
   selector:
     app: httpbin
+  ports:
+    - name: http
+      targetPort: 80
+      port: 80
+      protocol: TCP

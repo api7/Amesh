@@ -129,6 +129,7 @@ func (cp *amesh) initCmd() {
 func (cp *amesh) Deploy() error {
 	cp.initCmd()
 
+	log.Infof("Deploying amesh, command: %v", cp.install.String())
 	err := cp.install.Run()
 	if err != nil {
 		log.Errorf("failed to run amesh-controller install command: %s", cp.install.String())
@@ -146,6 +147,7 @@ func (cp *amesh) WaitForReady() error {
 }
 
 func (cp *amesh) Uninstall() error {
+	log.Infof("Uninstalling amesh, command: %v", cp.uninstall.String())
 	err := cp.uninstall.Run()
 	if err != nil {
 		log.Errorw("failed to uninstall amesh-controller",

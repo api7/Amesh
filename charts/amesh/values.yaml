@@ -135,6 +135,12 @@ istiod:
             env:
             - name: STATUS_SERVER_PORT
               value: "9999"
+            - name: METRICS_SERVER_PORT
+              value: "15090"
+            - name: METRICS_SERVER_PATH
+              value: "/stats/prometheus"
+            - name: APISIX_METRICS_URL
+              value: "http://localhost:9091/stats/prometheus"
             - name: ISTIO_XDS_SOURCE
               value: "grpc://istiod.{{ .Values.global.istioNamespace }}.svc.cluster.local:15010"
             - name: AMESH_GRPC_SOURCE

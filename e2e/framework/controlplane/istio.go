@@ -129,6 +129,7 @@ func (cp *istio) initCmd() {
 func (cp *istio) Deploy() error {
 	cp.initCmd()
 
+	log.Infof("Deploying istio, command: %v", cp.discovery.String())
 	err := cp.discovery.Run()
 	if err != nil {
 		log.Errorf("failed to run istio-discovery install command")
@@ -152,6 +153,7 @@ func (cp *istio) WaitForReady() error {
 }
 
 func (cp *istio) Uninstall() error {
+	log.Infof("Uninstalling istio, command: %v", cp.cleanupDiscovery.String())
 	err := cp.cleanupDiscovery.Run()
 	if err != nil {
 		log.Errorw("failed to uninstall istio-discovery",

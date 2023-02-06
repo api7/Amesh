@@ -56,4 +56,6 @@ header:
     - 'controller/hack/**'
     - '**/*.out'
     - 'api/go/proto/**'
+    - 'Dockerfiles/**'
+    - '**/*.h'
   comment: never

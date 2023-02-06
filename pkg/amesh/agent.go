@@ -14,20 +14,24 @@
 package amesh
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/api7/gopkg/pkg/log"
 	"github.com/fatih/color"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
 	"github.com/api7/amesh/pkg/amesh/provisioner"
@@ -151,6 +155,62 @@ func (g *Agent) internalDataHandler(dataType string) func(writer http.ResponseWr
 	}
 }
 
+func applyHeaders(dest http.Header, src http.Header, keys ...string) {
+	for _, key := range keys {
+		val := src.Get(key)
+		if val != "" {
+			dest.Set(key, val)
+		}
+	}
+}
+
+func (g *Agent) getMetrics(url string, header http.Header) ([]byte, error) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	applyHeaders(req.Header, header,
+		"Accept",
+		"Accept-Encoding",
+		"User-Agent",
+		"X-Prometheus-Scrape-Timeout-Seconds",
+	)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get apisix metrics %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get apisix metrics %s, status code: %v", url, resp.StatusCode)
+	}
+	metrics, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read apisix metrics body %s: %v", url, err)
+	}
+
+	return metrics, nil
+}
+
+// isGzipEncoding returns the client requires gzip-encoded content
+func isGzipEncoding(header http.Header) bool {
+	enc := header.Get("Accept-Encoding")
+	encodings := strings.Split(enc, ",")
+	for _, encoding := range encodings {
+		encoding = strings.TrimSpace(encoding)
+		if strings.HasPrefix(encoding, "gzip") {
+			return true
+		}
+	}
+	return false
+}
+
+var gzipPool = sync.Pool{
+	New: func() interface{} {
+		return gzip.NewWriter(nil)
+	},
+}
+
 func (g *Agent) Run(stop <-chan struct{}) error {
 	g.logger.Infow("sidecar started")
 	defer g.logger.Info("sidecar exited")
@@ -163,6 +223,7 @@ func (g *Agent) Run(stop <-chan struct{}) error {
 		}
 	}()
 
+	var statusServer *http.Server
 	go func() {
 		portStr := os.Getenv("STATUS_SERVER_PORT")
 		if portStr == "" {
@@ -182,11 +243,12 @@ func (g *Agent) Run(stop <-chan struct{}) error {
 		}
 
 		// TODO: Add test to verify status server still work when unable to connect to xds source/amesh source
-		http.HandleFunc("/status", g.internalDataHandler("status"))
-		http.HandleFunc("/routes", g.internalDataHandler("routes"))
-		http.HandleFunc("/upstreams", g.internalDataHandler("upstreams"))
-		http.HandleFunc("/plugins", g.internalDataHandler("plugins"))
-		http.HandleFunc("/sds/", func(writer http.ResponseWriter, request *http.Request) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/status", g.internalDataHandler("status"))
+		mux.HandleFunc("/routes", g.internalDataHandler("routes"))
+		mux.HandleFunc("/upstreams", g.internalDataHandler("upstreams"))
+		mux.HandleFunc("/plugins", g.internalDataHandler("plugins"))
+		mux.HandleFunc("/sds/", func(writer http.ResponseWriter, request *http.Request) {
 			name := strings.TrimPrefix(request.URL.Path, "/sds/")
 			if name != "" {
 				g.provisioner.SendSds(name)
@@ -195,10 +257,86 @@ func (g *Agent) Run(stop <-chan struct{}) error {
 			writer.WriteHeader(http.StatusOK)
 			writer.Write([]byte("Sending SDS: " + name))
 		})
+		statusServer = &http.Server{Addr: fmt.Sprintf(":%v", port), Handler: mux}
 
-		err = http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
+		err = statusServer.ListenAndServe()
 		if err != nil {
 			g.logger.Fatalw("failed to run status server",
+				zap.Error(err),
+			)
+			return
+		}
+	}()
+
+	var metricsServer *http.Server
+	go func() {
+		portStr := os.Getenv("METRICS_SERVER_PORT")
+		if portStr == "NONE" {
+			// Do not start metrics server
+			g.logger.Infof("METRICS_SERVER_PORT is NONE, status server won't start")
+			return
+		} else if portStr == "" {
+			portStr = "15090"
+		}
+
+		port := 15090
+		parsed, err := strconv.ParseInt(portStr, 10, 32)
+		if err != nil {
+			g.logger.Fatalw("failed to parse status server port, using default",
+				zap.Error(err),
+				zap.String("value", portStr),
+			)
+		} else {
+			port = int(parsed)
+		}
+
+		metricsPath := os.Getenv("METRICS_SERVER_PATH")
+		if metricsPath == "" {
+			metricsPath = "/stats/prometheus"
+		}
+
+		apisixMetricsURL := os.Getenv("APISIX_METRICS_URL")
+		if apisixMetricsURL == "" {
+			apisixMetricsURL = "http://localhost:9091/stats/prometheus"
+		}
+
+		// TODO: Add test to verify status server still work when unable to connect to xds source/amesh source
+		mux := http.NewServeMux()
+		mux.HandleFunc(metricsPath, func(writer http.ResponseWriter, request *http.Request) {
+			promhttp.Handler().ServeHTTP(writer, request)
+
+			apisixMetrics, err := g.getMetrics(apisixMetricsURL, request.Header)
+			if err != nil {
+				g.logger.Errorw("failed to get apisix metrics",
+					zap.Error(err),
+				)
+				return
+			}
+
+			w := io.Writer(writer)
+			if isGzipEncoding(request.Header) {
+				gz := gzipPool.Get().(*gzip.Writer)
+				defer gzipPool.Put(gz)
+
+				gz.Reset(w)
+				defer gz.Close()
+
+				w = gz
+			}
+
+			if _, err := w.Write(apisixMetrics); err != nil {
+				g.logger.Errorw("failed to write apisix metrics",
+					zap.Error(err),
+				)
+			}
+		})
+		metricsServer = &http.Server{Addr: fmt.Sprintf(":%v", port), Handler: mux}
+
+		g.logger.Infof("metrics server started at :%v, apisix metrics at %v", portStr+metricsPath, apisixMetricsURL)
+
+		err = metricsServer.ListenAndServe()
+		if err != nil {
+			g.logger.Fatalw("failed to run metrics server",
 				zap.Error(err),
 			)
 			return
@@ -210,6 +348,20 @@ loop:
 		select {
 		case <-stop:
 			g.logger.Info("stop signal received, grpc event dispatching stopped")
+			if statusServer != nil {
+				if err := statusServer.Shutdown(context.Background()); err != nil {
+					g.logger.Fatalw("failed to shut down status server",
+						zap.Error(err),
+					)
+				}
+			}
+			if metricsServer != nil {
+				if err := metricsServer.Shutdown(context.Background()); err != nil {
+					g.logger.Fatalw("failed to shut down metrics server",
+						zap.Error(err),
+					)
+				}
+			}
 			break loop
 		case events, ok := <-g.provisioner.EventsChannel():
 			if !ok {

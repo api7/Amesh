@@ -9,6 +9,8 @@ Istio 可以通过 `prometheus.io` 注解来控制 sidecar 指标是否被 Prome
 
 Sidecar 会将指标以纯文本的形式暴露在 `/stats/prometheus:15020`，通过该接口被 Prometheus 收集。
 
+它同时也会采集来自 APISIX 9091 端口的 APISIX 指标。支持 gzip 和纯文本格式。
+
 ## 安装 Prometheus 与配置
 
 在示例中，我们将直接使用 Istio 提供的快速示例配置来安装、运行 Prometheus。

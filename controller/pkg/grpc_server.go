@@ -30,6 +30,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	protov1 "github.com/api7/amesh/api/proto/v1"
+	"github.com/api7/amesh/controller/pkg/metrics"
 	"github.com/api7/amesh/controller/pkg/types"
 )
 
@@ -50,11 +51,11 @@ type GRPCController struct {
 	pluginConfigCache types.PodPluginConfigCache
 }
 
-func NewGRPCController(GRPCServerAddr string, pluginConfigCache types.PodPluginConfigCache) (*GRPCController, error) {
+func NewGRPCController(GRPCServerAddr string, pluginConfigCache types.PodPluginConfigCache, collector metrics.Collector) (*GRPCController, error) {
 	c := &GRPCController{
 		Log: ctrl.Log.WithName("controllers").WithName("GRPCServer"),
 
-		instanceManager:   NewInstanceManager(),
+		instanceManager:   NewInstanceManager(collector),
 		pluginConfigCache: pluginConfigCache,
 	}
 
