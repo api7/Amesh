@@ -35,14 +35,18 @@ jobs:
               - 'docs/**/*'
               - '*.md'
             go:
+              - '.github/**'
               - '*.go'
               - '**/*.go'
               - 'go.mod'
               - 'go.sum'
+              - '**/go.mod'
+              - '**/go.sum'
               - 'Makefile'
               - 'Dockerfiles/**'
               - '*.Dockerfile'
               - 'e2e/**'
+              - '**/e2e/**'
               - 'scripts/**'
             iptables:
               - 'cmd/iptables/**'
