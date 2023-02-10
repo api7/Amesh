@@ -35,6 +35,7 @@ jobs:
               - 'docs/**/*'
               - '*.md'
             go:
+              - '.github/**'
               - '*.go'
               - '**/*.go'
               - 'go.mod'
